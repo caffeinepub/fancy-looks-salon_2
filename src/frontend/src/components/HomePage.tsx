@@ -255,15 +255,7 @@ export default function HomePage({
           transition={{ delay: 1, duration: 0.6 }}
           className="text-xs text-muted-foreground mt-6"
         >
-          © {new Date().getFullYear()}.{" "}
-          <a
-            href={`https://caffeine.ai?utm_source=caffeine-footer&utm_medium=referral&utm_content=${encodeURIComponent(window.location.hostname)}`}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="hover:text-gold transition-colors"
-          >
-            Built with ♥ using caffeine.ai
-          </a>
+          © {new Date().getFullYear()}. Built by Sumit
         </motion.p>
       </div>
     </div>
