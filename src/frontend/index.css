@@ -1,0 +1,241 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ============================
+   FANCY LOOKS SALON — DESIGN TOKENS
+   Luxury Gold × Black × Charcoal
+   ============================ */
+
+@font-face {
+  font-family: "Playfair Display";
+  src: url("/assets/fonts/PlayfairDisplay[wght].woff2") format("woff2");
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Cabinet Grotesk";
+  src: url("/assets/fonts/CabinetGrotesk[wght].woff2") format("woff2");
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+
+@layer base {
+  :root {
+    /* ─── Fancy Looks Salon Dark Theme (always dark) ─── */
+    --radius: 0.5rem;
+
+    /* Surfaces */
+    --background: 0.08 0 0;         /* near-black #0A0A0A */
+    --foreground: 0.96 0.012 85;    /* warm cream */
+    --card: 0.16 0.006 60;          /* deep charcoal #2C2C2C */
+    --card-foreground: 0.96 0.012 85;
+    --popover: 0.13 0.006 60;
+    --popover-foreground: 0.96 0.012 85;
+
+    /* Gold — #D4AF37 ≈ oklch(0.76 0.15 85) */
+    --primary: 0.76 0.15 85;
+    --primary-foreground: 0.08 0 0;
+
+    /* Secondary surfaces */
+    --secondary: 0.22 0.008 60;
+    --secondary-foreground: 0.96 0.012 85;
+
+    /* Muted */
+    --muted: 0.18 0.006 60;
+    --muted-foreground: 0.60 0.012 75;
+
+    /* Accent (lighter gold tint) */
+    --accent: 0.20 0.012 80;
+    --accent-foreground: 0.76 0.15 85;
+
+    /* Destructive */
+    --destructive: 0.60 0.22 22;
+    --destructive-foreground: 0.98 0 0;
+
+    /* Borders */
+    --border: 0.26 0.010 70;
+    --input: 0.22 0.008 60;
+    --ring: 0.76 0.15 85;
+
+    /* Gold tokens */
+    --gold: 0.76 0.15 85;
+    --gold-dim: 0.55 0.10 85;
+    --gold-bright: 0.85 0.16 88;
+    --gold-glow: oklch(0.76 0.15 85 / 0.25);
+
+    /* Status colors */
+    --success: 0.68 0.18 148;
+    --success-foreground: 0.08 0 0;
+    --warning: 0.78 0.16 52;
+    --warning-foreground: 0.08 0 0;
+
+    /* Charts */
+    --chart-1: 0.76 0.15 85;
+    --chart-2: 0.68 0.18 148;
+    --chart-3: 0.60 0.22 22;
+    --chart-4: 0.55 0.15 270;
+    --chart-5: 0.78 0.16 52;
+
+    /* Sidebar */
+    --sidebar: 0.10 0.003 60;
+    --sidebar-foreground: 0.96 0.012 85;
+    --sidebar-primary: 0.76 0.15 85;
+    --sidebar-primary-foreground: 0.08 0 0;
+    --sidebar-accent: 0.20 0.012 80;
+    --sidebar-accent-foreground: 0.76 0.15 85;
+    --sidebar-border: 0.26 0.010 70;
+    --sidebar-ring: 0.76 0.15 85;
+  }
+
+  /* Force dark always — this is a luxury dark app */
+  * {
+    @apply border-border;
+    color-scheme: dark;
+  }
+
+  html {
+    @apply bg-background text-foreground;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+    font-family: "Cabinet Grotesk", ui-sans-serif, system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  h1, h2, h3, h4 {
+    font-family: "Playfair Display", Georgia, serif;
+  }
+}
+
+/* ─── Utility classes for Fancy Looks ─── */
+@layer utilities {
+  .font-display {
+    font-family: "Playfair Display", Georgia, serif;
+  }
+
+  .font-body {
+    font-family: "Cabinet Grotesk", ui-sans-serif, system-ui, sans-serif;
+  }
+
+  .text-gold {
+    color: oklch(var(--gold));
+  }
+
+  .bg-gold {
+    background-color: oklch(var(--gold));
+  }
+
+  .border-gold {
+    border-color: oklch(var(--gold));
+  }
+
+  .glow-gold {
+    box-shadow: 0 0 20px var(--gold-glow), 0 0 40px oklch(0.76 0.15 85 / 0.10);
+  }
+
+  .glow-gold-sm {
+    box-shadow: 0 0 10px var(--gold-glow);
+  }
+
+  .gold-gradient {
+    background: linear-gradient(135deg, oklch(0.76 0.15 85), oklch(0.65 0.12 78), oklch(0.76 0.15 85));
+  }
+
+  .gold-text-gradient {
+    background: linear-gradient(135deg, oklch(0.85 0.16 88), oklch(0.76 0.15 85), oklch(0.60 0.10 80));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  .luxury-card {
+    background: oklch(var(--card));
+    border: 1px solid oklch(var(--gold) / 0.2);
+    transition: border-color 0.3s ease, box-shadow 0.3s ease;
+  }
+
+  .luxury-card:hover {
+    border-color: oklch(var(--gold) / 0.5);
+    box-shadow: 0 0 20px oklch(0.76 0.15 85 / 0.15);
+  }
+
+  .bg-surface {
+    background-color: oklch(var(--card));
+  }
+
+  .scrollbar-gold::-webkit-scrollbar {
+    width: 4px;
+  }
+  .scrollbar-gold::-webkit-scrollbar-track {
+    background: oklch(var(--background));
+  }
+  .scrollbar-gold::-webkit-scrollbar-thumb {
+    background: oklch(var(--gold) / 0.5);
+    border-radius: 2px;
+  }
+}
+
+/* ─── Shimmer loading animation ─── */
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+.shimmer {
+  background: linear-gradient(
+    90deg,
+    oklch(var(--card)) 25%,
+    oklch(0.22 0.012 80) 50%,
+    oklch(var(--card)) 75%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.5s infinite;
+}
+
+/* ─── Gold spinner ─── */
+@keyframes gold-spin {
+  to { transform: rotate(360deg); }
+}
+
+.gold-spinner {
+  width: 24px;
+  height: 24px;
+  border: 2px solid oklch(var(--gold) / 0.2);
+  border-top-color: oklch(var(--gold));
+  border-radius: 50%;
+  animation: gold-spin 0.8s linear infinite;
+}
+
+/* ─── Subtle noise texture overlay ─── */
+.noise-overlay::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.03'/%3E%3C/svg%3E");
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* ─── Decorative diagonal separator ─── */
+.diagonal-cut {
+  clip-path: polygon(0 0, 100% 0, 100% 90%, 0 100%);
+}
+
+/* ─── Input overrides for dark luxury theme ─── */
+input[type="date"],
+input[type="month"],
+input[type="time"] {
+  color-scheme: dark;
+}
+
+/* ─── Focus ring override ─── */
+:focus-visible {
+  outline: 2px solid oklch(var(--gold) / 0.7);
+  outline-offset: 2px;
+}
