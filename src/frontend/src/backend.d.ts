@@ -56,8 +56,8 @@ export enum Variant_checkIn_checkOut {
     checkOut = "checkOut"
 }
 export interface backendInterface {
-    addOrUpdateEarningsEntry(staffId: bigint, date: string, parts: Array<bigint>): Promise<bigint>;
-    addStaff(name: string, photoUrl: string, shiftStart: string, shiftEnd: string, isPremium: boolean): Promise<bigint>;
+    addOrUpdateEarningsEntry(adminPassword: string, staffId: bigint, date: string, parts: Array<bigint>): Promise<bigint>;
+    addStaff(adminPassword: string, name: string, photoUrl: string, shiftStart: string, shiftEnd: string, isPremium: boolean): Promise<bigint>;
     assignCallerUserRole(user: Principal, role: UserRole): Promise<void>;
     checkIn(staffId: bigint): Promise<bigint>;
     checkOut(staffId: bigint): Promise<bigint>;
@@ -70,8 +70,8 @@ export interface backendInterface {
     getTodayAttendance(): Promise<Array<AttendanceRecord>>;
     getUserProfile(user: Principal): Promise<UserProfile | null>;
     isCallerAdmin(): Promise<boolean>;
-    removeStaff(id: bigint): Promise<void>;
+    removeStaff(adminPassword: string, id: bigint): Promise<void>;
     saveCallerUserProfile(profile: UserProfile): Promise<void>;
-    updateStaff(id: bigint, name: string, photoUrl: string, shiftStart: string, shiftEnd: string, isPremium: boolean, isActive: boolean): Promise<void>;
+    updateStaff(adminPassword: string, id: bigint, name: string, photoUrl: string, shiftStart: string, shiftEnd: string, isPremium: boolean, isActive: boolean): Promise<void>;
     verifyAdminPassword(password: string): Promise<boolean>;
 }

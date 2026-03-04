@@ -53,12 +53,12 @@ export const AttendanceRecord = IDL.Record({
 export const idlService = IDL.Service({
   '_initializeAccessControlWithSecret' : IDL.Func([IDL.Text], [], []),
   'addOrUpdateEarningsEntry' : IDL.Func(
-      [IDL.Nat, IDL.Text, IDL.Vec(IDL.Nat)],
+      [IDL.Text, IDL.Nat, IDL.Text, IDL.Vec(IDL.Nat)],
       [IDL.Nat],
       [],
     ),
   'addStaff' : IDL.Func(
-      [IDL.Text, IDL.Text, IDL.Text, IDL.Text, IDL.Bool],
+      [IDL.Text, IDL.Text, IDL.Text, IDL.Text, IDL.Text, IDL.Bool],
       [IDL.Nat],
       [],
     ),
@@ -86,10 +86,19 @@ export const idlService = IDL.Service({
       ['query'],
     ),
   'isCallerAdmin' : IDL.Func([], [IDL.Bool], ['query']),
-  'removeStaff' : IDL.Func([IDL.Nat], [], []),
+  'removeStaff' : IDL.Func([IDL.Text, IDL.Nat], [], []),
   'saveCallerUserProfile' : IDL.Func([UserProfile], [], []),
   'updateStaff' : IDL.Func(
-      [IDL.Nat, IDL.Text, IDL.Text, IDL.Text, IDL.Text, IDL.Bool, IDL.Bool],
+      [
+        IDL.Text,
+        IDL.Nat,
+        IDL.Text,
+        IDL.Text,
+        IDL.Text,
+        IDL.Text,
+        IDL.Bool,
+        IDL.Bool,
+      ],
       [],
       [],
     ),
@@ -144,12 +153,12 @@ export const idlFactory = ({ IDL }) => {
   return IDL.Service({
     '_initializeAccessControlWithSecret' : IDL.Func([IDL.Text], [], []),
     'addOrUpdateEarningsEntry' : IDL.Func(
-        [IDL.Nat, IDL.Text, IDL.Vec(IDL.Nat)],
+        [IDL.Text, IDL.Nat, IDL.Text, IDL.Vec(IDL.Nat)],
         [IDL.Nat],
         [],
       ),
     'addStaff' : IDL.Func(
-        [IDL.Text, IDL.Text, IDL.Text, IDL.Text, IDL.Bool],
+        [IDL.Text, IDL.Text, IDL.Text, IDL.Text, IDL.Text, IDL.Bool],
         [IDL.Nat],
         [],
       ),
@@ -177,10 +186,19 @@ export const idlFactory = ({ IDL }) => {
         ['query'],
       ),
     'isCallerAdmin' : IDL.Func([], [IDL.Bool], ['query']),
-    'removeStaff' : IDL.Func([IDL.Nat], [], []),
+    'removeStaff' : IDL.Func([IDL.Text, IDL.Nat], [], []),
     'saveCallerUserProfile' : IDL.Func([UserProfile], [], []),
     'updateStaff' : IDL.Func(
-        [IDL.Nat, IDL.Text, IDL.Text, IDL.Text, IDL.Text, IDL.Bool, IDL.Bool],
+        [
+          IDL.Text,
+          IDL.Nat,
+          IDL.Text,
+          IDL.Text,
+          IDL.Text,
+          IDL.Text,
+          IDL.Bool,
+          IDL.Bool,
+        ],
         [],
         [],
       ),

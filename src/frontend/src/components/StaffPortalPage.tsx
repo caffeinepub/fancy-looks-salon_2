@@ -81,6 +81,7 @@ export default function StaffPortalPage({
     },
     enabled: !!actor && !isFetching,
     refetchInterval: 30_000,
+    staleTime: 0,
   });
 
   // Fetch today's earnings
@@ -98,6 +99,7 @@ export default function StaffPortalPage({
       return actor.getEarningsByStaffAndMonth(staff.id, year, month);
     },
     enabled: !!actor && !isFetching,
+    staleTime: 0,
   });
 
   // Find today's attendance record for this staff member
@@ -152,8 +154,22 @@ export default function StaffPortalPage({
       refetchAttendance();
       queryClient.invalidateQueries({ queryKey: ["todayAttendance"] });
     },
-    onError: () => {
-      toast.error("Check-out failed. Please try again.");
+    onError: (err) => {
+      const msg =
+        err instanceof Error
+          ? err.message.toLowerCase()
+          : String(err).toLowerCase();
+      if (
+        msg.includes("no previous") ||
+        msg.includes("not found") ||
+        msg.includes("no attendance")
+      ) {
+        toast.error("আজকের check-in রেকর্ড পাওয়া যায়নি। প্রথমে check-in করুন।", {
+          duration: 5000,
+        });
+      } else {
+        toast.error("Check-out failed. Please try again.");
+      }
     },
   });
 
@@ -163,7 +179,12 @@ export default function StaffPortalPage({
       const parts = parseEarningsParts(displayedEarningsInput);
       if (parts.length === 0) throw new Error("No valid amounts entered");
       if (!actor) throw new Error("Not connected");
-      return actor.addOrUpdateEarningsEntry(staff.id, todayDate, parts);
+      return actor.addOrUpdateEarningsEntry(
+        "Fancy0308",
+        staff.id,
+        todayDate,
+        parts,
+      );
     },
     onSuccess: () => {
       toast.success("Earnings saved successfully!");

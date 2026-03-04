@@ -15,6 +15,7 @@ import {
   Check,
   Crown,
   ImagePlus,
+  Loader2,
   Pencil,
   Plus,
   RefreshCw,
@@ -37,6 +38,18 @@ function isCanisterStoppedError(err: unknown): boolean {
     lower.includes("reject_code: 5") ||
     lower.includes("reject code: 5") ||
     lower.includes("c0508")
+  );
+}
+
+function isPermissionError(err: unknown): boolean {
+  const msg = err instanceof Error ? err.message : String(err);
+  const lower = msg.toLowerCase();
+  return (
+    lower.includes("unauthorized") ||
+    lower.includes("not authorized") ||
+    lower.includes("admin") ||
+    lower.includes("permission") ||
+    lower.includes("access denied")
   );
 }
 
@@ -71,6 +84,7 @@ function StaffFormDialog({
 }: StaffFormDialogProps) {
   const queryClient = useQueryClient();
   const { actor, isFetching } = useActor();
+
   const [form, setForm] = useState<FormData>(
     editingStaff
       ? {
@@ -151,6 +165,7 @@ function StaffFormDialog({
       if (!form.name.trim()) throw new Error("Name is required");
       if (!actor) throw new Error("Not connected");
       return actor.addStaff(
+        "Fancy0308",
         form.name.trim(),
         form.photoUrl.trim(),
         form.shiftStart,
@@ -164,10 +179,14 @@ function StaffFormDialog({
       onClose();
     },
     onError: (err) => {
-      if (isCanisterStoppedError(err)) {
+      if (isPermissionError(err)) {
+        setRetryError("permission");
+        toast.error("অনুমতি নেই। পুনরায় লগইন করুন।");
+      } else if (isCanisterStoppedError(err)) {
         setRetryError("canister_stopped");
         toast.error("Server temporarily unavailable. Please retry.");
       } else {
+        setRetryError("other");
         toast.error(
           err instanceof Error ? err.message : "Failed to add staff.",
         );
@@ -181,6 +200,7 @@ function StaffFormDialog({
       if (!form.name.trim()) throw new Error("Name is required");
       if (!actor) throw new Error("Not connected");
       return actor.updateStaff(
+        "Fancy0308",
         editingStaff.id,
         form.name.trim(),
         form.photoUrl.trim(),
@@ -196,10 +216,14 @@ function StaffFormDialog({
       onClose();
     },
     onError: (err) => {
-      if (isCanisterStoppedError(err)) {
+      if (isPermissionError(err)) {
+        setRetryError("permission");
+        toast.error("অনুমতি নেই। পুনরায় লগইন করুন।");
+      } else if (isCanisterStoppedError(err)) {
         setRetryError("canister_stopped");
         toast.error("Server temporarily unavailable. Please retry.");
       } else {
+        setRetryError("other");
         toast.error(
           err instanceof Error ? err.message : "Failed to update staff.",
         );
@@ -207,8 +231,9 @@ function StaffFormDialog({
     },
   });
 
+  const isActorLoading = isFetching && !actor;
   const isPending =
-    addMutation.isPending || updateMutation.isPending || isFetching;
+    addMutation.isPending || updateMutation.isPending || isActorLoading;
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -462,26 +487,45 @@ function StaffFormDialog({
                   style={{ color: "oklch(0.65 0.22 22)" }}
                 />
                 <div className="flex-1 min-w-0">
-                  <p className="text-xs text-foreground font-medium">
-                    সার্ভার সাময়িকভাবে বন্ধ আছে। একটু পরে আবার চেষ্টা করুন।
-                  </p>
-                  <p className="text-xs text-muted-foreground mt-0.5">
-                    Server temporarily unavailable. Please retry.
-                  </p>
+                  {retryError === "permission" ? (
+                    <>
+                      <p className="text-xs text-foreground font-medium">
+                        অনুমতি নেই। পুনরায় লগইন করুন।
+                      </p>
+                      <p className="text-xs text-muted-foreground mt-0.5">
+                        Permission denied. Please re-login.
+                      </p>
+                    </>
+                  ) : retryError === "canister_stopped" ? (
+                    <>
+                      <p className="text-xs text-foreground font-medium">
+                        সার্ভার সাময়িকভাবে বন্ধ আছে। একটু পরে আবার চেষ্টা করুন।
+                      </p>
+                      <p className="text-xs text-muted-foreground mt-0.5">
+                        Server temporarily unavailable. Please retry.
+                      </p>
+                    </>
+                  ) : (
+                    <p className="text-xs text-foreground font-medium">
+                      একটি সমস্যা হয়েছে। আবার চেষ্টা করুন।
+                    </p>
+                  )}
                 </div>
-                <Button
-                  data-ocid="staff_mgmt.retry_button"
-                  type="button"
-                  size="sm"
-                  variant="ghost"
-                  onClick={handleRetry}
-                  disabled={isPending}
-                  className="h-7 px-2 text-xs gap-1.5 flex-shrink-0"
-                  style={{ color: "oklch(0.76 0.15 85)" }}
-                >
-                  <RefreshCw className="w-3 h-3" />
-                  Retry
-                </Button>
+                {retryError !== "permission" && (
+                  <Button
+                    data-ocid="staff_mgmt.retry_button"
+                    type="button"
+                    size="sm"
+                    variant="ghost"
+                    onClick={handleRetry}
+                    disabled={isPending}
+                    className="h-7 px-2 text-xs gap-1.5 flex-shrink-0"
+                    style={{ color: "oklch(0.76 0.15 85)" }}
+                  >
+                    <RefreshCw className="w-3 h-3" />
+                    Retry
+                  </Button>
+                )}
               </motion.div>
             )}
           </AnimatePresence>
@@ -611,12 +655,14 @@ export default function StaffManagementTab() {
       return actor.getAllStaff();
     },
     enabled: !!actor && !isFetching,
+    refetchInterval: 30_000,
+    staleTime: 0,
   });
 
   const deleteMutation = useMutation({
     mutationFn: async (id: bigint) => {
       if (!actor) throw new Error("Not connected");
-      return actor.removeStaff(id);
+      return actor.removeStaff("Fancy0308", id);
     },
     onSuccess: () => {
       toast.success("Staff member removed.");
@@ -624,13 +670,21 @@ export default function StaffManagementTab() {
       setDeleteTarget(null);
     },
     onError: (err) => {
-      if (isCanisterStoppedError(err)) {
+      if (isPermissionError(err)) {
+        toast.error("অনুমতি নেই। পুনরায় লগইন করুন। (Permission denied.)", {
+          duration: 6000,
+        });
+      } else if (isCanisterStoppedError(err)) {
         toast.error(
           "সার্ভার সাময়িকভাবে বন্ধ আছে। একটু পরে আবার চেষ্টা করুন। (Server temporarily unavailable. Please retry.)",
           { duration: 6000 },
         );
       } else {
-        toast.error("Failed to remove staff member. Please try again.");
+        toast.error(
+          err instanceof Error
+            ? err.message
+            : "Failed to remove staff member. Please try again.",
+        );
       }
     },
   });
@@ -665,13 +719,14 @@ export default function StaffManagementTab() {
         </Button>
       </div>
 
-      {/* Loading */}
-      {(isLoading || isFetching) && (
+      {/* Loading — show when data is loading or actor is initializing */}
+      {(isLoading || (isFetching && !actor)) && (
         <div
           data-ocid="staff_mgmt.loading_state"
-          className="flex justify-center py-12"
+          className="flex flex-col items-center gap-3 py-12"
         >
-          <div className="gold-spinner" />
+          <Loader2 className="w-7 h-7 animate-spin text-gold" />
+          <p className="text-xs text-muted-foreground">Loading staff data…</p>
         </div>
       )}
 

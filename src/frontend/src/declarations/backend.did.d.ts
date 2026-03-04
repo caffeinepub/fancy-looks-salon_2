@@ -53,10 +53,13 @@ export type UserRole = { 'admin' : null } |
 export interface _SERVICE {
   '_initializeAccessControlWithSecret' : ActorMethod<[string], undefined>,
   'addOrUpdateEarningsEntry' : ActorMethod<
-    [bigint, string, Array<bigint>],
+    [string, bigint, string, Array<bigint>],
     bigint
   >,
-  'addStaff' : ActorMethod<[string, string, string, string, boolean], bigint>,
+  'addStaff' : ActorMethod<
+    [string, string, string, string, string, boolean],
+    bigint
+  >,
   'assignCallerUserRole' : ActorMethod<[Principal, UserRole], undefined>,
   'checkIn' : ActorMethod<[bigint], bigint>,
   'checkOut' : ActorMethod<[bigint], bigint>,
@@ -72,10 +75,10 @@ export interface _SERVICE {
   'getTodayAttendance' : ActorMethod<[], Array<AttendanceRecord>>,
   'getUserProfile' : ActorMethod<[Principal], [] | [UserProfile]>,
   'isCallerAdmin' : ActorMethod<[], boolean>,
-  'removeStaff' : ActorMethod<[bigint], undefined>,
+  'removeStaff' : ActorMethod<[string, bigint], undefined>,
   'saveCallerUserProfile' : ActorMethod<[UserProfile], undefined>,
   'updateStaff' : ActorMethod<
-    [bigint, string, string, string, string, boolean, boolean],
+    [string, bigint, string, string, string, string, boolean, boolean],
     undefined
   >,
   'verifyAdminPassword' : ActorMethod<[string], boolean>,

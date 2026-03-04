@@ -31,6 +31,8 @@ function StaffMonthlySummary({
       );
     },
     enabled: !!actor && !isFetching,
+    refetchInterval: 30_000,
+    staleTime: 0,
   });
 
   const totalEarnings = (earnings ?? []).reduce((sum, e) => sum + e.total, 0n);
@@ -195,6 +197,8 @@ export default function MonthlySummaryTab() {
       return actor.getAllStaff();
     },
     enabled: !!actor && !isFetching,
+    refetchInterval: 30_000,
+    staleTime: 0,
   });
 
   const activeStaff = (staffList ?? []).filter((s) => s.isActive);

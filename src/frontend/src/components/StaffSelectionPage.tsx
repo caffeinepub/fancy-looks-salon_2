@@ -134,6 +134,8 @@ export default function StaffSelectionPage({
       return actor.getAllStaff();
     },
     enabled: !!actor && !isFetching,
+    refetchInterval: 30_000,
+    staleTime: 0,
   });
 
   const activeStaff = staffList?.filter((s) => s.isActive) ?? [];

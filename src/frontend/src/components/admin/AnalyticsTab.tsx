@@ -41,6 +41,8 @@ export default function AnalyticsTab() {
       return actor.getAllStaff();
     },
     enabled: !!actor && !isFetching,
+    refetchInterval: 30_000,
+    staleTime: 0,
   });
 
   const { data: attendanceList, isLoading: isLoadingAttendance } = useQuery({
@@ -51,6 +53,7 @@ export default function AnalyticsTab() {
     },
     enabled: !!actor && !isFetching,
     refetchInterval: 30_000,
+    staleTime: 0,
   });
 
   const isLoading = isLoadingStaff || isLoadingAttendance || isFetching;

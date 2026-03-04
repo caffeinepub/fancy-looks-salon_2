@@ -211,6 +211,7 @@ export default function LiveStatusTab() {
     },
     enabled: !!actor && !isFetching,
     refetchInterval: 30_000,
+    staleTime: 0,
   });
 
   const {
@@ -225,6 +226,7 @@ export default function LiveStatusTab() {
     },
     enabled: !!actor && !isFetching,
     refetchInterval: 30_000,
+    staleTime: 0,
   });
 
   const { data: earningsList } = useQuery({
@@ -246,6 +248,7 @@ export default function LiveStatusTab() {
     },
     enabled: !!actor && !isFetching && !!staffList && staffList.length > 0,
     refetchInterval: 30_000,
+    staleTime: 0,
   });
 
   const isLoading = isLoadingStaff || isLoadingAttendance || isFetching;

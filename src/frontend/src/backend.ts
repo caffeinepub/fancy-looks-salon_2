@@ -139,8 +139,8 @@ export enum Variant_checkIn_checkOut {
 }
 export interface backendInterface {
     _initializeAccessControlWithSecret(userSecret: string): Promise<void>;
-    addOrUpdateEarningsEntry(staffId: bigint, date: string, parts: Array<bigint>): Promise<bigint>;
-    addStaff(name: string, photoUrl: string, shiftStart: string, shiftEnd: string, isPremium: boolean): Promise<bigint>;
+    addOrUpdateEarningsEntry(adminPassword: string, staffId: bigint, date: string, parts: Array<bigint>): Promise<bigint>;
+    addStaff(adminPassword: string, name: string, photoUrl: string, shiftStart: string, shiftEnd: string, isPremium: boolean): Promise<bigint>;
     assignCallerUserRole(user: Principal, role: UserRole): Promise<void>;
     checkIn(staffId: bigint): Promise<bigint>;
     checkOut(staffId: bigint): Promise<bigint>;
@@ -153,9 +153,9 @@ export interface backendInterface {
     getTodayAttendance(): Promise<Array<AttendanceRecord>>;
     getUserProfile(user: Principal): Promise<UserProfile | null>;
     isCallerAdmin(): Promise<boolean>;
-    removeStaff(id: bigint): Promise<void>;
+    removeStaff(adminPassword: string, id: bigint): Promise<void>;
     saveCallerUserProfile(profile: UserProfile): Promise<void>;
-    updateStaff(id: bigint, name: string, photoUrl: string, shiftStart: string, shiftEnd: string, isPremium: boolean, isActive: boolean): Promise<void>;
+    updateStaff(adminPassword: string, id: bigint, name: string, photoUrl: string, shiftStart: string, shiftEnd: string, isPremium: boolean, isActive: boolean): Promise<void>;
     verifyAdminPassword(password: string): Promise<boolean>;
 }
 import type { AttendanceRecord as _AttendanceRecord, NotificationEvent as _NotificationEvent, UserProfile as _UserProfile, UserRole as _UserRole } from "./declarations/backend.did.d.ts";
@@ -175,31 +175,31 @@ export class Backend implements backendInterface {
             return result;
         }
     }
-    async addOrUpdateEarningsEntry(arg0: bigint, arg1: string, arg2: Array<bigint>): Promise<bigint> {
+    async addOrUpdateEarningsEntry(arg0: string, arg1: bigint, arg2: string, arg3: Array<bigint>): Promise<bigint> {
         if (this.processError) {
             try {
-                const result = await this.actor.addOrUpdateEarningsEntry(arg0, arg1, arg2);
+                const result = await this.actor.addOrUpdateEarningsEntry(arg0, arg1, arg2, arg3);
                 return result;
             } catch (e) {
                 this.processError(e);
                 throw new Error("unreachable");
             }
         } else {
-            const result = await this.actor.addOrUpdateEarningsEntry(arg0, arg1, arg2);
+            const result = await this.actor.addOrUpdateEarningsEntry(arg0, arg1, arg2, arg3);
             return result;
         }
     }
-    async addStaff(arg0: string, arg1: string, arg2: string, arg3: string, arg4: boolean): Promise<bigint> {
+    async addStaff(arg0: string, arg1: string, arg2: string, arg3: string, arg4: string, arg5: boolean): Promise<bigint> {
         if (this.processError) {
             try {
-                const result = await this.actor.addStaff(arg0, arg1, arg2, arg3, arg4);
+                const result = await this.actor.addStaff(arg0, arg1, arg2, arg3, arg4, arg5);
                 return result;
             } catch (e) {
                 this.processError(e);
                 throw new Error("unreachable");
             }
         } else {
-            const result = await this.actor.addStaff(arg0, arg1, arg2, arg3, arg4);
+            const result = await this.actor.addStaff(arg0, arg1, arg2, arg3, arg4, arg5);
             return result;
         }
     }
@@ -371,17 +371,17 @@ export class Backend implements backendInterface {
             return result;
         }
     }
-    async removeStaff(arg0: bigint): Promise<void> {
+    async removeStaff(arg0: string, arg1: bigint): Promise<void> {
         if (this.processError) {
             try {
-                const result = await this.actor.removeStaff(arg0);
+                const result = await this.actor.removeStaff(arg0, arg1);
                 return result;
             } catch (e) {
                 this.processError(e);
                 throw new Error("unreachable");
             }
         } else {
-            const result = await this.actor.removeStaff(arg0);
+            const result = await this.actor.removeStaff(arg0, arg1);
             return result;
         }
     }
@@ -399,17 +399,17 @@ export class Backend implements backendInterface {
             return result;
         }
     }
-    async updateStaff(arg0: bigint, arg1: string, arg2: string, arg3: string, arg4: string, arg5: boolean, arg6: boolean): Promise<void> {
+    async updateStaff(arg0: string, arg1: bigint, arg2: string, arg3: string, arg4: string, arg5: string, arg6: boolean, arg7: boolean): Promise<void> {
         if (this.processError) {
             try {
-                const result = await this.actor.updateStaff(arg0, arg1, arg2, arg3, arg4, arg5, arg6);
+                const result = await this.actor.updateStaff(arg0, arg1, arg2, arg3, arg4, arg5, arg6, arg7);
                 return result;
             } catch (e) {
                 this.processError(e);
                 throw new Error("unreachable");
             }
         } else {
-            const result = await this.actor.updateStaff(arg0, arg1, arg2, arg3, arg4, arg5, arg6);
+            const result = await this.actor.updateStaff(arg0, arg1, arg2, arg3, arg4, arg5, arg6, arg7);
             return result;
         }
     }
