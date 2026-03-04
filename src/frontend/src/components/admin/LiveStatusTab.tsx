@@ -1,5 +1,13 @@
 import { useQuery } from "@tanstack/react-query";
-import { Clock, Crown, RefreshCw, UserCircle2 } from "lucide-react";
+import {
+  AlertTriangle,
+  Clock,
+  Crown,
+  LogOut,
+  RefreshCw,
+  TrendingUp,
+  UserCircle2,
+} from "lucide-react";
 import { motion } from "motion/react";
 import type {
   AttendanceRecord,
@@ -8,8 +16,8 @@ import type {
 } from "../../backend.d";
 import { useActor } from "../../hooks/useActor";
 
-function formatNanoTimestamp(ns: bigint | undefined): string {
-  if (!ns) return "—";
+function formatNanoTimestamp(ns: bigint | undefined | null): string {
+  if (ns == null) return "—";
   const ms = Number(ns / 1_000_000n);
   return new Date(ms).toLocaleTimeString(undefined, {
     hour: "2-digit",
@@ -17,8 +25,47 @@ function formatNanoTimestamp(ns: bigint | undefined): string {
   });
 }
 
-function getTodayDate(): string {
-  return new Date().toISOString().slice(0, 10).replace(/-/g, "");
+/** Returns epoch-days string (matches backend date storage format) */
+function getTodayEpochDays(): string {
+  return Math.floor(Date.now() / (24 * 60 * 60 * 1000)).toString();
+}
+
+/** Format minutes as "Xh Ym" */
+function formatMinutes(mins: number): string {
+  if (mins <= 0) return "0 min";
+  const h = Math.floor(mins / 60);
+  const m = mins % 60;
+  if (h > 0 && m > 0) return `${h}h ${m}m`;
+  if (h > 0) return `${h}h`;
+  return `${m}m`;
+}
+
+/** Compute late info from raw check-in timestamp vs shift start */
+function computeLateInfo(
+  checkInTime: bigint,
+  shiftStart: string,
+): { isLate: boolean; lateMinutes: number } {
+  const ms = Number(checkInTime / 1_000_000n);
+  const d = new Date(ms);
+  const checkInMins = d.getHours() * 60 + d.getMinutes();
+  const [sh, sm] = shiftStart.split(":").map(Number);
+  const shiftStartMins = (sh ?? 0) * 60 + (sm ?? 0);
+  const diff = checkInMins - shiftStartMins;
+  return { isLate: diff > 5, lateMinutes: diff > 5 ? diff : 0 };
+}
+
+/** Compute overtime / early-exit info from raw check-out timestamp vs shift end */
+function computeOvertimeInfo(
+  checkOutTime: bigint,
+  shiftEnd: string,
+): { isEarlyExit: boolean; overtimeMinutes: number } {
+  const ms = Number(checkOutTime / 1_000_000n);
+  const d = new Date(ms);
+  const checkOutMins = d.getHours() * 60 + d.getMinutes();
+  const [eh, em] = shiftEnd.split(":").map(Number);
+  const shiftEndMins = (eh ?? 0) * 60 + (em ?? 0);
+  const diff = checkOutMins - shiftEndMins;
+  return { isEarlyExit: diff < -5, overtimeMinutes: diff > 5 ? diff : 0 };
 }
 
 function StaffStatusCard({
@@ -32,13 +79,26 @@ function StaffStatusCard({
   earnings: EarningsEntry | undefined;
   index: number;
 }) {
+  // Robust null-safe state checks
   const isCheckedIn =
-    attendance?.checkInTime !== undefined &&
-    attendance?.checkOutTime === undefined;
+    !!attendance &&
+    attendance.checkInTime != null &&
+    attendance.checkOutTime == null;
   const isCheckedOut =
-    attendance?.checkInTime !== undefined &&
-    attendance?.checkOutTime !== undefined;
-  const notIn = !attendance?.checkInTime;
+    !!attendance &&
+    attendance.checkInTime != null &&
+    attendance.checkOutTime != null;
+  const notIn = !attendance || attendance.checkInTime == null;
+
+  // Frontend-computed flags (reliable)
+  const lateInfo =
+    attendance?.checkInTime != null
+      ? computeLateInfo(attendance.checkInTime, staff.shiftStart)
+      : null;
+  const overtimeInfo =
+    attendance?.checkOutTime != null
+      ? computeOvertimeInfo(attendance.checkOutTime, staff.shiftEnd)
+      : null;
 
   return (
     <motion.div
@@ -129,12 +189,12 @@ function StaffStatusCard({
           <span
             className="inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded-full"
             style={{
-              background: "oklch(0.18 0.006 60)",
-              color: "oklch(0.50 0.006 60)",
-              border: "1px solid oklch(0.28 0.006 60)",
+              background: "oklch(0.60 0.22 22 / 0.15)",
+              color: "oklch(0.65 0.22 22)",
+              border: "1px solid oklch(0.60 0.22 22 / 0.3)",
             }}
           >
-            Not Yet In
+            Absent
           </span>
         )}
       </div>
@@ -157,40 +217,43 @@ function StaffStatusCard({
         </div>
       )}
 
-      {/* Flags */}
-      {!staff.isPremium && attendance && (
+      {/* Flags — frontend-computed */}
+      {!staff.isPremium && attendance && attendance.checkInTime != null && (
         <div className="flex flex-wrap gap-1">
-          {attendance.isLate && (
+          {lateInfo?.isLate && (
             <span
-              className="text-[10px] px-1.5 py-0.5 rounded"
+              className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded font-medium"
               style={{
                 background: "oklch(0.60 0.22 22 / 0.15)",
                 color: "oklch(0.65 0.22 22)",
               }}
             >
-              Late
+              <AlertTriangle className="w-2.5 h-2.5" />
+              Late +{formatMinutes(lateInfo.lateMinutes)}
             </span>
           )}
-          {attendance.isEarlyExit && (
+          {overtimeInfo?.isEarlyExit && (
             <span
-              className="text-[10px] px-1.5 py-0.5 rounded"
+              className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded font-medium"
               style={{
                 background: "oklch(0.78 0.16 52 / 0.15)",
                 color: "oklch(0.78 0.16 52)",
               }}
             >
+              <LogOut className="w-2.5 h-2.5" />
               Early Exit
             </span>
           )}
-          {attendance.overtimeMinutes > 0n && (
+          {overtimeInfo != null && overtimeInfo.overtimeMinutes > 0 && (
             <span
-              className="text-[10px] px-1.5 py-0.5 rounded"
+              className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded font-medium"
               style={{
                 background: "oklch(0.76 0.15 85 / 0.12)",
                 color: "oklch(0.76 0.15 85)",
               }}
             >
-              +{String(attendance.overtimeMinutes)}min OT
+              <TrendingUp className="w-2.5 h-2.5" />
+              Extra +{formatMinutes(overtimeInfo.overtimeMinutes)}
             </span>
           )}
         </div>
@@ -201,7 +264,7 @@ function StaffStatusCard({
 
 export default function LiveStatusTab() {
   const { actor, isFetching } = useActor();
-  const todayDate = getTodayDate();
+  const todayEpochDays = getTodayEpochDays();
 
   const { data: staffList, isLoading: isLoadingStaff } = useQuery({
     queryKey: ["allStaff"],
@@ -241,7 +304,9 @@ export default function LiveStatusTab() {
           .map((s) =>
             actor
               .getEarningsByStaffAndMonth(s.id, year, month)
-              .then((entries) => entries.filter((e) => e.date === todayDate)),
+              .then((entries) =>
+                entries.filter((e) => e.date === todayEpochDays),
+              ),
           ),
       );
       return results.flat();
@@ -252,7 +317,6 @@ export default function LiveStatusTab() {
   });
 
   const isLoading = isLoadingStaff || isLoadingAttendance || isFetching;
-  // earningsList is used via getEarnings()
   const activeStaff = (staffList ?? []).filter((s) => s.isActive);
 
   const getAttendance = (staff: StaffProfile): AttendanceRecord | undefined =>
@@ -263,7 +327,7 @@ export default function LiveStatusTab() {
 
   const checkedInCount = activeStaff.filter((s) => {
     const a = getAttendance(s);
-    return a?.checkInTime !== undefined && a?.checkOutTime === undefined;
+    return !!a && a.checkInTime != null && a.checkOutTime == null;
   }).length;
 
   return (
@@ -274,9 +338,11 @@ export default function LiveStatusTab() {
           { label: "Total Active Staff", value: activeStaff.length },
           { label: "Currently In", value: checkedInCount, gold: true },
           {
-            label: "Not Yet In",
-            value: activeStaff.filter((s) => !getAttendance(s)?.checkInTime)
-              .length,
+            label: "Absent / Not In",
+            value: activeStaff.filter((s) => {
+              const a = getAttendance(s);
+              return !a || a.checkInTime == null;
+            }).length,
           },
         ].map((stat) => (
           <div

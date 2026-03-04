@@ -1,20 +1,28 @@
-import { Input } from "@/components/ui/input";
-import { useQuery } from "@tanstack/react-query";
+import { Button } from "@/components/ui/button";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   AlertTriangle,
   Calendar,
   Clock,
   Crown,
+  LogOut,
   TrendingUp,
   UserCircle2,
 } from "lucide-react";
 import { motion } from "motion/react";
 import { useState } from "react";
-import type { AttendanceRecord, StaffProfile } from "../../backend.d";
+import { toast } from "sonner";
+import type {
+  AttendanceRecord,
+  HalfDayRecord,
+  StaffProfile,
+} from "../../backend.d";
 import { useActor } from "../../hooks/useActor";
 
-function formatNanoTimestamp(ns: bigint | undefined): string {
-  if (!ns) return "—";
+const ADMIN_PASSWORD = "Fancy0308";
+
+function formatNanoTimestamp(ns: bigint | undefined | null): string {
+  if (ns == null) return "—";
   const ms = Number(ns / 1_000_000n);
   return new Date(ms).toLocaleTimeString(undefined, {
     hour: "2-digit",
@@ -26,13 +34,57 @@ function getTodayDateInput(): string {
   return new Date().toISOString().slice(0, 10);
 }
 
-function dateInputToBackend(dateStr: string): string {
-  return dateStr.replace(/-/g, "");
+/** Convert YYYY-MM-DD → epoch-days string (backend format) */
+function dateToEpochDays(dateStr: string): string {
+  return Math.floor(
+    new Date(dateStr).getTime() / (24 * 60 * 60 * 1000),
+  ).toString();
+}
+
+/** Format minutes as "Xh Ym" */
+function formatMinutes(mins: number): string {
+  if (mins <= 0) return "0 min";
+  const h = Math.floor(mins / 60);
+  const m = mins % 60;
+  if (h > 0 && m > 0) return `${h}h ${m}m`;
+  if (h > 0) return `${h}h`;
+  return `${m}m`;
+}
+
+/** Compute late info from raw check-in timestamp vs shift start */
+function computeLateInfo(
+  checkInTime: bigint,
+  shiftStart: string,
+): { isLate: boolean; lateMinutes: number } {
+  const ms = Number(checkInTime / 1_000_000n);
+  const d = new Date(ms);
+  const checkInMins = d.getHours() * 60 + d.getMinutes();
+  const [sh, sm] = shiftStart.split(":").map(Number);
+  const shiftStartMins = (sh ?? 0) * 60 + (sm ?? 0);
+  const diff = checkInMins - shiftStartMins;
+  return { isLate: diff > 5, lateMinutes: diff > 5 ? diff : 0 };
+}
+
+/** Compute overtime / early-exit info from raw check-out timestamp vs shift end */
+function computeOvertimeInfo(
+  checkOutTime: bigint,
+  shiftEnd: string,
+): { isEarlyExit: boolean; overtimeMinutes: number } {
+  const ms = Number(checkOutTime / 1_000_000n);
+  const d = new Date(ms);
+  const checkOutMins = d.getHours() * 60 + d.getMinutes();
+  const [eh, em] = shiftEnd.split(":").map(Number);
+  const shiftEndMins = (eh ?? 0) * 60 + (em ?? 0);
+  const diff = checkOutMins - shiftEndMins;
+  return { isEarlyExit: diff < -5, overtimeMinutes: diff > 5 ? diff : 0 };
 }
 
 export default function AnalyticsTab() {
   const { actor, isFetching } = useActor();
+  const queryClient = useQueryClient();
   const [selectedDate, setSelectedDate] = useState(getTodayDateInput());
+
+  const epochDays = dateToEpochDays(selectedDate);
 
   const { data: staffList, isLoading: isLoadingStaff } = useQuery({
     queryKey: ["allStaff"],
@@ -45,33 +97,79 @@ export default function AnalyticsTab() {
     staleTime: 0,
   });
 
-  const { data: attendanceList, isLoading: isLoadingAttendance } = useQuery({
-    queryKey: ["todayAttendance"],
+  const { data: attendanceList, isLoading: isLoadingAttendance } = useQuery<
+    AttendanceRecord[]
+  >({
+    queryKey: ["attendanceByDate", selectedDate],
     queryFn: async () => {
       if (!actor) return [];
-      return actor.getTodayAttendance();
+      return actor.getAttendanceByDate(epochDays);
     },
     enabled: !!actor && !isFetching,
     refetchInterval: 30_000,
     staleTime: 0,
   });
 
-  const isLoading = isLoadingStaff || isLoadingAttendance || isFetching;
-  const backendDate = dateInputToBackend(selectedDate);
-  const isToday =
-    backendDate === new Date().toISOString().slice(0, 10).replace(/-/g, "");
+  const { data: halfDayList, isLoading: isLoadingHalfDays } = useQuery<
+    HalfDayRecord[]
+  >({
+    queryKey: ["halfDaysByDate", selectedDate],
+    queryFn: async () => {
+      if (!actor) return [];
+      return actor.getHalfDaysByDate(epochDays);
+    },
+    enabled: !!actor && !isFetching,
+    refetchInterval: 30_000,
+    staleTime: 0,
+  });
+
+  const markHalfDayMutation = useMutation({
+    mutationFn: async ({ staffId }: { staffId: bigint }) => {
+      if (!actor) throw new Error("Not connected");
+      return actor.markHalfDay(ADMIN_PASSWORD, staffId, epochDays);
+    },
+    onSuccess: () => {
+      toast.success("Half day marked");
+      queryClient.invalidateQueries({
+        queryKey: ["halfDaysByDate", selectedDate],
+      });
+    },
+    onError: () => {
+      toast.error("Failed to mark half day");
+    },
+  });
+
+  const removeHalfDayMutation = useMutation({
+    mutationFn: async ({ staffId }: { staffId: bigint }) => {
+      if (!actor) throw new Error("Not connected");
+      return actor.removeHalfDay(ADMIN_PASSWORD, staffId, epochDays);
+    },
+    onSuccess: () => {
+      toast.success("Half day unmarked");
+      queryClient.invalidateQueries({
+        queryKey: ["halfDaysByDate", selectedDate],
+      });
+    },
+    onError: () => {
+      toast.error("Failed to unmark half day");
+    },
+  });
+
+  const isLoading =
+    isLoadingStaff || isLoadingAttendance || isLoadingHalfDays || isFetching;
 
   const activeStaff = (staffList ?? []).filter((s) => s.isActive);
 
-  const getAttendance = (staff: StaffProfile): AttendanceRecord | undefined => {
-    if (!isToday) return undefined; // Only today's data available
-    return attendanceList?.find((r) => String(r.staffId) === String(staff.id));
-  };
+  const getAttendance = (staff: StaffProfile): AttendanceRecord | undefined =>
+    attendanceList?.find((r) => String(r.staffId) === String(staff.id));
+
+  const isHalfDay = (staff: StaffProfile): boolean =>
+    !!halfDayList?.find((r) => String(r.staffId) === String(staff.id));
 
   return (
     <div className="space-y-5">
       {/* Date picker */}
-      <div className="flex items-center gap-4">
+      <div className="flex items-center gap-4 flex-wrap">
         <div className="flex items-center gap-2">
           <Calendar className="w-4 h-4 text-gold" />
           <label
@@ -81,16 +179,16 @@ export default function AnalyticsTab() {
             Select Date:
           </label>
         </div>
-        <Input
+        <input
           id="analytics-date-input"
           data-ocid="analytics.date_select"
           type="date"
           value={selectedDate}
           onChange={(e) => setSelectedDate(e.target.value)}
-          className="w-44 font-body bg-input border-border text-foreground text-sm"
+          className="w-44 font-body text-sm px-3 py-1.5 rounded-lg bg-input border border-border text-foreground"
           max={getTodayDateInput()}
         />
-        {!isToday && (
+        {selectedDate !== getTodayDateInput() && (
           <span
             className="text-xs px-2 py-1 rounded-full"
             style={{
@@ -98,7 +196,7 @@ export default function AnalyticsTab() {
               color: "oklch(0.78 0.16 52)",
             }}
           >
-            Historical data — only today's attendance is available
+            Historical View
           </span>
         )}
       </div>
@@ -127,17 +225,41 @@ export default function AnalyticsTab() {
             <div className="space-y-3">
               {activeStaff.map((staff, i) => {
                 const att = getAttendance(staff);
+                const halfDay = isHalfDay(staff);
+                const isMarkingHalfDay =
+                  markHalfDayMutation.isPending &&
+                  String(markHalfDayMutation.variables?.staffId) ===
+                    String(staff.id);
+                const isRemovingHalfDay =
+                  removeHalfDayMutation.isPending &&
+                  String(removeHalfDayMutation.variables?.staffId) ===
+                    String(staff.id);
+
+                // Frontend-computed analytics (reliable vs backend flags)
+                const lateInfo =
+                  att?.checkInTime != null
+                    ? computeLateInfo(att.checkInTime, staff.shiftStart)
+                    : null;
+                const overtimeInfo =
+                  att?.checkOutTime != null
+                    ? computeOvertimeInfo(att.checkOutTime, staff.shiftEnd)
+                    : null;
+
+                const hasCheckedIn = att?.checkInTime != null;
+                const isOnTime = hasCheckedIn && !lateInfo?.isLate;
+
                 return (
                   <motion.div
                     key={String(staff.id)}
+                    data-ocid={`analytics.staff_row.${i + 1}`}
                     initial={{ opacity: 0, y: 10 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ delay: i * 0.04, duration: 0.35 }}
                     className="rounded-xl p-4 luxury-card"
                   >
-                    <div className="flex flex-wrap items-center gap-4">
+                    <div className="flex flex-wrap items-start gap-4">
                       {/* Staff info */}
-                      <div className="flex items-center gap-3 min-w-0 w-48">
+                      <div className="flex items-center gap-3 min-w-0 w-44 flex-shrink-0">
                         <div className="relative flex-shrink-0">
                           <div
                             className="w-10 h-10 rounded-full overflow-hidden"
@@ -184,7 +306,7 @@ export default function AnalyticsTab() {
                         </div>
                       </div>
 
-                      {/* Attendance info */}
+                      {/* Attendance badges */}
                       <div className="flex-1 flex flex-wrap items-center gap-2">
                         {staff.isPremium ? (
                           <span
@@ -200,22 +322,24 @@ export default function AnalyticsTab() {
                           </span>
                         ) : (
                           <>
-                            {isToday && att ? (
+                            {att ? (
                               <>
-                                {/* Check-in time */}
-                                {att.checkInTime && (
+                                {/* Check-in/out times */}
+                                {att.checkInTime != null && (
                                   <div className="flex items-center gap-1 text-xs text-muted-foreground">
                                     <Clock className="w-3 h-3" />
                                     In: {formatNanoTimestamp(att.checkInTime)}
                                   </div>
                                 )}
-                                {att.checkOutTime && (
+                                {att.checkOutTime != null && (
                                   <div className="flex items-center gap-1 text-xs text-muted-foreground">
                                     <Clock className="w-3 h-3" />
                                     Out: {formatNanoTimestamp(att.checkOutTime)}
                                   </div>
                                 )}
-                                {att.isLate && (
+
+                                {/* Late Joining — frontend computed */}
+                                {lateInfo?.isLate && (
                                   <span
                                     className="inline-flex items-center gap-1 text-xs font-medium px-2 py-1 rounded-full"
                                     style={{
@@ -226,65 +350,154 @@ export default function AnalyticsTab() {
                                     }}
                                   >
                                     <AlertTriangle className="w-3 h-3" />
-                                    Late Joining
+                                    Late +{formatMinutes(lateInfo.lateMinutes)}
                                   </span>
                                 )}
-                                {att.isEarlyExit && (
+
+                                {/* Early Exit — frontend computed, separate section */}
+                                {overtimeInfo?.isEarlyExit && (
                                   <span
                                     className="inline-flex items-center gap-1 text-xs font-medium px-2 py-1 rounded-full"
                                     style={{
-                                      background: "oklch(0.78 0.16 52 / 0.15)",
-                                      color: "oklch(0.78 0.16 52)",
+                                      background: "oklch(0.65 0.20 45 / 0.15)",
+                                      color: "oklch(0.68 0.20 45)",
                                       border:
-                                        "1px solid oklch(0.78 0.16 52 / 0.3)",
+                                        "1px solid oklch(0.65 0.20 45 / 0.3)",
                                     }}
                                   >
-                                    <AlertTriangle className="w-3 h-3" />
+                                    <LogOut className="w-3 h-3" />
                                     Early Exit
                                   </span>
                                 )}
-                                {att.overtimeMinutes > 0n && (
-                                  <span
-                                    className="inline-flex items-center gap-1 text-xs font-medium px-2 py-1 rounded-full"
-                                    style={{
-                                      background: "oklch(0.76 0.15 85 / 0.12)",
-                                      color: "oklch(0.76 0.15 85)",
-                                      border:
-                                        "1px solid oklch(0.76 0.15 85 / 0.25)",
-                                    }}
-                                  >
-                                    <TrendingUp className="w-3 h-3" />
-                                    {String(att.overtimeMinutes)} min Overtime
-                                  </span>
-                                )}
-                                {!att.isLate &&
-                                  !att.isEarlyExit &&
-                                  att.overtimeMinutes === 0n &&
-                                  att.checkInTime && (
+
+                                {/* Overtime — frontend computed */}
+                                {overtimeInfo != null &&
+                                  overtimeInfo.overtimeMinutes > 0 && (
                                     <span
-                                      className="text-xs text-muted-foreground"
+                                      className="inline-flex items-center gap-1 text-xs font-medium px-2 py-1 rounded-full"
+                                      style={{
+                                        background:
+                                          "oklch(0.76 0.15 85 / 0.12)",
+                                        color: "oklch(0.76 0.15 85)",
+                                        border:
+                                          "1px solid oklch(0.76 0.15 85 / 0.25)",
+                                      }}
+                                    >
+                                      <TrendingUp className="w-3 h-3" />
+                                      Extra +
+                                      {formatMinutes(
+                                        overtimeInfo.overtimeMinutes,
+                                      )}
+                                    </span>
+                                  )}
+
+                                {/* On time */}
+                                {isOnTime &&
+                                  !overtimeInfo?.isEarlyExit &&
+                                  !(
+                                    overtimeInfo != null &&
+                                    overtimeInfo.overtimeMinutes > 0
+                                  ) && (
+                                    <span
+                                      className="text-xs font-medium"
                                       style={{ color: "oklch(0.68 0.18 148)" }}
                                     >
                                       ✓ On Time
                                     </span>
                                   )}
-                                {!att.checkInTime && (
-                                  <span className="text-xs text-muted-foreground">
-                                    Absent / Not Yet In
+
+                                {/* Not checked in → Absent */}
+                                {att.checkInTime == null && (
+                                  <span
+                                    className="inline-flex items-center gap-1 text-xs font-medium px-2 py-1 rounded-full"
+                                    style={{
+                                      background: "oklch(0.60 0.22 22 / 0.15)",
+                                      color: "oklch(0.65 0.22 22)",
+                                      border:
+                                        "1px solid oklch(0.60 0.22 22 / 0.3)",
+                                    }}
+                                  >
+                                    Absent
                                   </span>
                                 )}
                               </>
-                            ) : isToday && !att ? (
-                              <span className="text-xs text-muted-foreground">
-                                Not checked in today
-                              </span>
                             ) : (
-                              <span className="text-xs text-muted-foreground italic">
-                                Historical data unavailable — only today's
-                                analytics are supported
+                              /* No attendance record at all → Absent */
+                              <span
+                                className="inline-flex items-center gap-1 text-xs font-medium px-2 py-1 rounded-full"
+                                style={{
+                                  background: "oklch(0.60 0.22 22 / 0.15)",
+                                  color: "oklch(0.65 0.22 22)",
+                                  border: "1px solid oklch(0.60 0.22 22 / 0.3)",
+                                }}
+                              >
+                                Absent
                               </span>
                             )}
                           </>
+                        )}
+
+                        {/* Half Day badge */}
+                        {halfDay && (
+                          <span
+                            className="inline-flex items-center gap-1 text-xs font-medium px-2 py-1 rounded-full"
+                            style={{
+                              background: "oklch(0.60 0.18 270 / 0.15)",
+                              color: "oklch(0.65 0.18 270)",
+                              border: "1px solid oklch(0.60 0.18 270 / 0.3)",
+                            }}
+                          >
+                            ½ Half Day
+                          </span>
+                        )}
+                      </div>
+
+                      {/* Half Day action */}
+                      <div className="flex-shrink-0 flex items-center">
+                        {halfDay ? (
+                          <Button
+                            data-ocid={`analytics.half_day_unmark.${i + 1}`}
+                            size="sm"
+                            variant="outline"
+                            disabled={isRemovingHalfDay}
+                            onClick={() =>
+                              removeHalfDayMutation.mutate({
+                                staffId: staff.id,
+                              })
+                            }
+                            className="h-7 text-xs font-body gap-1"
+                            style={{
+                              borderColor: "oklch(0.60 0.18 270 / 0.5)",
+                              color: "oklch(0.65 0.18 270)",
+                              background: "oklch(0.60 0.18 270 / 0.08)",
+                            }}
+                          >
+                            {isRemovingHalfDay ? (
+                              <div className="gold-spinner w-3 h-3" />
+                            ) : null}
+                            Unmark Half Day
+                          </Button>
+                        ) : (
+                          <Button
+                            data-ocid={`analytics.half_day_mark.${i + 1}`}
+                            size="sm"
+                            variant="outline"
+                            disabled={isMarkingHalfDay}
+                            onClick={() =>
+                              markHalfDayMutation.mutate({ staffId: staff.id })
+                            }
+                            className="h-7 text-xs font-body gap-1"
+                            style={{
+                              borderColor: "oklch(0.76 0.15 85 / 0.3)",
+                              color: "oklch(0.78 0.12 85 / 0.7)",
+                              background: "transparent",
+                            }}
+                          >
+                            {isMarkingHalfDay ? (
+                              <div className="gold-spinner w-3 h-3" />
+                            ) : null}
+                            Mark Half Day
+                          </Button>
                         )}
                       </div>
                     </div>

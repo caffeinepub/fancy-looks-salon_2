@@ -7,6 +7,19 @@ export interface None {
     __kind__: "None";
 }
 export type Option<T> = Some<T> | None;
+export interface HalfDayRecord {
+    id: bigint;
+    staffId: bigint;
+    date: string;
+    markedAt: bigint;
+}
+export interface EarningsEntry {
+    id: bigint;
+    total: bigint;
+    staffId: bigint;
+    date: string;
+    parts: Array<bigint>;
+}
 export interface StaffProfile {
     id: bigint;
     isPremium: boolean;
@@ -16,13 +29,6 @@ export interface StaffProfile {
     isActive: boolean;
     shiftStart: string;
     shiftEnd: string;
-}
-export interface EarningsEntry {
-    id: bigint;
-    total: bigint;
-    staffId: bigint;
-    date: string;
-    parts: Array<bigint>;
 }
 export interface AttendanceRecord {
     id: bigint;
@@ -62,14 +68,19 @@ export interface backendInterface {
     checkIn(staffId: bigint): Promise<bigint>;
     checkOut(staffId: bigint): Promise<bigint>;
     getAllStaff(): Promise<Array<StaffProfile>>;
+    getAttendanceByDate(date: string): Promise<Array<AttendanceRecord>>;
     getCallerUserProfile(): Promise<UserProfile | null>;
     getCallerUserRole(): Promise<UserRole>;
     getEarningsByStaffAndMonth(staffId: bigint, year: bigint, month: bigint): Promise<Array<EarningsEntry>>;
+    getHalfDaysByDate(date: string): Promise<Array<HalfDayRecord>>;
+    getHalfDaysByMonth(year: bigint, month: bigint): Promise<Array<HalfDayRecord>>;
     getRecentNotifications(limit: bigint): Promise<Array<NotificationEvent>>;
     getStaffById(id: bigint): Promise<StaffProfile>;
     getTodayAttendance(): Promise<Array<AttendanceRecord>>;
     getUserProfile(user: Principal): Promise<UserProfile | null>;
     isCallerAdmin(): Promise<boolean>;
+    markHalfDay(adminPassword: string, staffId: bigint, date: string): Promise<bigint>;
+    removeHalfDay(adminPassword: string, staffId: bigint, date: string): Promise<void>;
     removeStaff(adminPassword: string, id: bigint): Promise<void>;
     saveCallerUserProfile(profile: UserProfile): Promise<void>;
     updateStaff(adminPassword: string, id: bigint, name: string, photoUrl: string, shiftStart: string, shiftEnd: string, isPremium: boolean, isActive: boolean): Promise<void>;

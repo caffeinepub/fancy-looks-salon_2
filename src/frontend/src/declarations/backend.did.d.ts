@@ -27,6 +27,12 @@ export interface EarningsEntry {
   'date' : string,
   'parts' : Array<bigint>,
 }
+export interface HalfDayRecord {
+  'id' : bigint,
+  'staffId' : bigint,
+  'date' : string,
+  'markedAt' : bigint,
+}
 export interface NotificationEvent {
   'id' : bigint,
   'staffName' : string,
@@ -64,17 +70,22 @@ export interface _SERVICE {
   'checkIn' : ActorMethod<[bigint], bigint>,
   'checkOut' : ActorMethod<[bigint], bigint>,
   'getAllStaff' : ActorMethod<[], Array<StaffProfile>>,
+  'getAttendanceByDate' : ActorMethod<[string], Array<AttendanceRecord>>,
   'getCallerUserProfile' : ActorMethod<[], [] | [UserProfile]>,
   'getCallerUserRole' : ActorMethod<[], UserRole>,
   'getEarningsByStaffAndMonth' : ActorMethod<
     [bigint, bigint, bigint],
     Array<EarningsEntry>
   >,
+  'getHalfDaysByDate' : ActorMethod<[string], Array<HalfDayRecord>>,
+  'getHalfDaysByMonth' : ActorMethod<[bigint, bigint], Array<HalfDayRecord>>,
   'getRecentNotifications' : ActorMethod<[bigint], Array<NotificationEvent>>,
   'getStaffById' : ActorMethod<[bigint], StaffProfile>,
   'getTodayAttendance' : ActorMethod<[], Array<AttendanceRecord>>,
   'getUserProfile' : ActorMethod<[Principal], [] | [UserProfile]>,
   'isCallerAdmin' : ActorMethod<[], boolean>,
+  'markHalfDay' : ActorMethod<[string, bigint, string], bigint>,
+  'removeHalfDay' : ActorMethod<[string, bigint, string], undefined>,
   'removeStaff' : ActorMethod<[string, bigint], undefined>,
   'saveCallerUserProfile' : ActorMethod<[UserProfile], undefined>,
   'updateStaff' : ActorMethod<

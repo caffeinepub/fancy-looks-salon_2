@@ -1,26 +1,101 @@
 import { useQuery } from "@tanstack/react-query";
-import { Calendar, Crown, TrendingUp, UserCircle2 } from "lucide-react";
+import {
+  AlertTriangle,
+  Calendar,
+  Crown,
+  LogOut,
+  TrendingUp,
+  UserCircle2,
+} from "lucide-react";
 import { motion } from "motion/react";
 import { useState } from "react";
-import type { EarningsEntry, StaffProfile } from "../../backend.d";
+import type {
+  AttendanceRecord,
+  EarningsEntry,
+  HalfDayRecord,
+  StaffProfile,
+} from "../../backend.d";
 import { useActor } from "../../hooks/useActor";
 
-const WORKING_DAYS_PER_MONTH = 26;
+/** Convert YYYY-MM-DD → epoch-days string */
+function dateToEpochDays(dateStr: string): string {
+  return Math.floor(
+    new Date(dateStr).getTime() / (24 * 60 * 60 * 1000),
+  ).toString();
+}
+
+/** Convert epoch-days string to readable "D/M" format */
+function epochDaysToDisplay(dateStr: string): string {
+  const n = Number(dateStr);
+  if (Number.isNaN(n)) return dateStr;
+  const d = new Date(n * 24 * 60 * 60 * 1000);
+  return `${d.getDate()}/${d.getMonth() + 1}`;
+}
+
+/** Get all calendar days in the given year/month, up to today */
+function getDaysInMonth(year: number, month: number): string[] {
+  const today = new Date();
+  const days: string[] = [];
+  const daysInMonth = new Date(year, month, 0).getDate();
+  const endDay =
+    year === today.getFullYear() && month === today.getMonth() + 1
+      ? today.getDate()
+      : daysInMonth;
+
+  for (let d = 1; d <= endDay; d++) {
+    days.push(
+      `${year}-${String(month).padStart(2, "0")}-${String(d).padStart(2, "0")}`,
+    );
+  }
+  return days;
+}
+
+/** Compute late info from raw check-in timestamp vs shift start */
+function computeLateInfo(
+  checkInTime: bigint,
+  shiftStart: string,
+): { isLate: boolean; lateMinutes: number } {
+  const ms = Number(checkInTime / 1_000_000n);
+  const d = new Date(ms);
+  const checkInMins = d.getHours() * 60 + d.getMinutes();
+  const [sh, sm] = shiftStart.split(":").map(Number);
+  const shiftStartMins = (sh ?? 0) * 60 + (sm ?? 0);
+  const diff = checkInMins - shiftStartMins;
+  return { isLate: diff > 5, lateMinutes: diff > 5 ? diff : 0 };
+}
+
+/** Compute overtime / early-exit info from raw check-out timestamp vs shift end */
+function computeOvertimeInfo(
+  checkOutTime: bigint,
+  shiftEnd: string,
+): { isEarlyExit: boolean; overtimeMinutes: number } {
+  const ms = Number(checkOutTime / 1_000_000n);
+  const d = new Date(ms);
+  const checkOutMins = d.getHours() * 60 + d.getMinutes();
+  const [eh, em] = shiftEnd.split(":").map(Number);
+  const shiftEndMins = (eh ?? 0) * 60 + (em ?? 0);
+  const diff = checkOutMins - shiftEndMins;
+  return { isEarlyExit: diff < -5, overtimeMinutes: diff > 5 ? diff : 0 };
+}
 
 function StaffMonthlySummary({
   staff,
   year,
   month,
+  halfDayRecords,
   index,
 }: {
   staff: StaffProfile;
   year: number;
   month: number;
+  halfDayRecords: HalfDayRecord[];
   index: number;
 }) {
   const { actor, isFetching } = useActor();
 
-  const { data: earnings, isLoading } = useQuery<EarningsEntry[]>({
+  const { data: earnings, isLoading: isLoadingEarnings } = useQuery<
+    EarningsEntry[]
+  >({
     queryKey: ["earnings", String(staff.id), year, month],
     queryFn: async () => {
       if (!actor) return [];
@@ -35,9 +110,56 @@ function StaffMonthlySummary({
     staleTime: 0,
   });
 
+  // Batch fetch all days in month for attendance analytics
+  const daysInMonth = getDaysInMonth(year, month);
+  const { data: monthlyAttendance, isLoading: isLoadingAttendance } = useQuery<
+    AttendanceRecord[]
+  >({
+    queryKey: ["monthlyAttendance", String(staff.id), year, month],
+    queryFn: async () => {
+      if (!actor) return [];
+      const results = await Promise.all(
+        daysInMonth.map((day) =>
+          actor.getAttendanceByDate(dateToEpochDays(day)),
+        ),
+      );
+      // Flatten and filter by this staff
+      return results
+        .flat()
+        .filter((r) => String(r.staffId) === String(staff.id));
+    },
+    enabled: !!actor && !isFetching,
+    staleTime: 60_000, // Cache monthly data for 1 min
+  });
+
+  const isLoading = isLoadingEarnings || isLoadingAttendance;
+
   const totalEarnings = (earnings ?? []).reduce((sum, e) => sum + e.total, 0n);
-  const daysPresent = (earnings ?? []).length; // Each earnings entry = 1 day present (proxy)
-  const daysAbsent = Math.max(0, WORKING_DAYS_PER_MONTH - daysPresent);
+
+  // Use attendance records for presence count (not earnings)
+  const att = monthlyAttendance ?? [];
+  const daysPresent = att.filter((r) => r.checkInTime != null).length;
+  const daysAbsent = Math.max(0, daysInMonth.length - daysPresent);
+
+  // Frontend-computed analytics — reliable vs backend flags
+  const lateDays = att.filter(
+    (r) =>
+      r.checkInTime != null &&
+      computeLateInfo(r.checkInTime, staff.shiftStart).isLate,
+  ).length;
+  const overtimeDays = att.filter(
+    (r) =>
+      r.checkOutTime != null &&
+      computeOvertimeInfo(r.checkOutTime, staff.shiftEnd).overtimeMinutes > 0,
+  ).length;
+  const earlyExitDays = att.filter(
+    (r) =>
+      r.checkOutTime != null &&
+      computeOvertimeInfo(r.checkOutTime, staff.shiftEnd).isEarlyExit,
+  ).length;
+  const halfDayCount = halfDayRecords.filter(
+    (r) => String(r.staffId) === String(staff.id),
+  ).length;
 
   return (
     <motion.div
@@ -47,7 +169,7 @@ function StaffMonthlySummary({
       transition={{ delay: index * 0.05, duration: 0.35 }}
       className="rounded-xl p-4 luxury-card"
     >
-      <div className="flex flex-wrap items-center gap-4">
+      <div className="flex flex-wrap items-start gap-4">
         {/* Staff info */}
         <div className="flex items-center gap-3 w-44 flex-shrink-0">
           <div className="relative">
@@ -100,54 +222,77 @@ function StaffMonthlySummary({
 
         {/* Stats */}
         {isLoading ? (
-          <div className="flex-1 flex justify-center">
+          <div className="flex-1 flex justify-center items-center py-4">
             <div className="gold-spinner w-5 h-5" />
           </div>
         ) : (
-          <div className="flex-1 grid grid-cols-2 md:grid-cols-4 gap-3">
-            <div
-              className="text-center p-2 rounded-lg"
-              style={{
-                background: "oklch(0.68 0.18 148 / 0.08)",
-                border: "1px solid oklch(0.68 0.18 148 / 0.2)",
-              }}
-            >
-              <p
-                className="font-display text-lg font-bold"
-                style={{ color: "oklch(0.68 0.18 148)" }}
+          <div className="flex-1 space-y-3">
+            {/* Row 1: Presence + Earnings */}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+              <StatBox
+                value={daysPresent}
+                label="Days Present"
+                color="oklch(0.68 0.18 148)"
+                bg="oklch(0.68 0.18 148 / 0.08)"
+                border="oklch(0.68 0.18 148 / 0.2)"
+              />
+              <StatBox
+                value={daysAbsent}
+                label="Days Absent"
+                color="oklch(0.65 0.22 22)"
+                bg="oklch(0.60 0.22 22 / 0.08)"
+                border="oklch(0.60 0.22 22 / 0.2)"
+              />
+              <div
+                className="text-center p-2 rounded-lg col-span-2"
+                style={{
+                  background: "oklch(0.76 0.15 85 / 0.08)",
+                  border: "1px solid oklch(0.76 0.15 85 / 0.25)",
+                }}
               >
-                {daysPresent}
-              </p>
-              <p className="text-[11px] text-muted-foreground">Days Present</p>
+                <p className="font-display text-xl font-bold gold-text-gradient">
+                  ₹{Number(totalEarnings).toLocaleString()}
+                </p>
+                <p className="text-[11px] text-muted-foreground">
+                  Total Earnings
+                </p>
+              </div>
             </div>
-            <div
-              className="text-center p-2 rounded-lg"
-              style={{
-                background: "oklch(0.60 0.22 22 / 0.08)",
-                border: "1px solid oklch(0.60 0.22 22 / 0.2)",
-              }}
-            >
-              <p
-                className="font-display text-lg font-bold"
-                style={{ color: "oklch(0.65 0.22 22)" }}
-              >
-                {daysAbsent}
-              </p>
-              <p className="text-[11px] text-muted-foreground">Days Absent</p>
-            </div>
-            <div
-              className="text-center p-2 rounded-lg col-span-2 md:col-span-2"
-              style={{
-                background: "oklch(0.76 0.15 85 / 0.08)",
-                border: "1px solid oklch(0.76 0.15 85 / 0.25)",
-              }}
-            >
-              <p className="font-display text-xl font-bold gold-text-gradient">
-                ₹{Number(totalEarnings).toLocaleString()}
-              </p>
-              <p className="text-[11px] text-muted-foreground">
-                Total Monthly Earnings
-              </p>
+
+            {/* Row 2: Analytics badges */}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+              <AnalyticStatBox
+                icon={<AlertTriangle className="w-3 h-3" />}
+                value={lateDays}
+                label="Late Days"
+                color="oklch(0.65 0.22 22)"
+                bg="oklch(0.60 0.22 22 / 0.08)"
+                border="oklch(0.60 0.22 22 / 0.2)"
+              />
+              <AnalyticStatBox
+                icon={<TrendingUp className="w-3 h-3" />}
+                value={overtimeDays}
+                label="Overtime Days"
+                color="oklch(0.76 0.15 85)"
+                bg="oklch(0.76 0.15 85 / 0.08)"
+                border="oklch(0.76 0.15 85 / 0.2)"
+              />
+              <AnalyticStatBox
+                icon={<LogOut className="w-3 h-3" />}
+                value={earlyExitDays}
+                label="Early Exits"
+                color="oklch(0.68 0.20 45)"
+                bg="oklch(0.65 0.20 45 / 0.08)"
+                border="oklch(0.65 0.20 45 / 0.2)"
+              />
+              <AnalyticStatBox
+                icon={<span className="text-[10px]">½</span>}
+                value={halfDayCount}
+                label="Half Days"
+                color="oklch(0.65 0.18 270)"
+                bg="oklch(0.60 0.18 270 / 0.08)"
+                border="oklch(0.60 0.18 270 / 0.2)"
+              />
             </div>
           </div>
         )}
@@ -173,7 +318,7 @@ function StaffMonthlySummary({
                   border: "1px solid oklch(0.76 0.15 85 / 0.2)",
                 }}
               >
-                {e.date.slice(6, 8)}/{e.date.slice(4, 6)}: ₹
+                {epochDaysToDisplay(e.date)}: ₹
                 {Number(e.total).toLocaleString()}
               </span>
             ))}
@@ -181,6 +326,63 @@ function StaffMonthlySummary({
         </div>
       )}
     </motion.div>
+  );
+}
+
+function StatBox({
+  value,
+  label,
+  color,
+  bg,
+  border,
+}: {
+  value: number;
+  label: string;
+  color: string;
+  bg: string;
+  border: string;
+}) {
+  return (
+    <div
+      className="text-center p-2 rounded-lg"
+      style={{ background: bg, border: `1px solid ${border}` }}
+    >
+      <p className="font-display text-lg font-bold" style={{ color }}>
+        {value}
+      </p>
+      <p className="text-[11px] text-muted-foreground">{label}</p>
+    </div>
+  );
+}
+
+function AnalyticStatBox({
+  icon,
+  value,
+  label,
+  color,
+  bg,
+  border,
+}: {
+  icon: React.ReactNode;
+  value: number;
+  label: string;
+  color: string;
+  bg: string;
+  border: string;
+}) {
+  return (
+    <div
+      className="text-center p-2 rounded-lg"
+      style={{ background: bg, border: `1px solid ${border}` }}
+    >
+      <div className="flex items-center justify-center gap-1 mb-0.5">
+        <span style={{ color }}>{icon}</span>
+        <p className="font-display text-lg font-bold" style={{ color }}>
+          {value}
+        </p>
+      </div>
+      <p className="text-[11px] text-muted-foreground">{label}</p>
+    </div>
   );
 }
 
@@ -199,6 +401,18 @@ export default function MonthlySummaryTab() {
     enabled: !!actor && !isFetching,
     refetchInterval: 30_000,
     staleTime: 0,
+  });
+
+  // Fetch all half days for the month (once, shared across all staff rows)
+  const { data: halfDayRecords } = useQuery<HalfDayRecord[]>({
+    queryKey: ["halfDaysByMonth", year, month],
+    queryFn: async () => {
+      if (!actor) return [];
+      return actor.getHalfDaysByMonth(BigInt(year), BigInt(month));
+    },
+    enabled: !!actor && !isFetching,
+    refetchInterval: 60_000,
+    staleTime: 30_000,
   });
 
   const activeStaff = (staffList ?? []).filter((s) => s.isActive);
@@ -251,20 +465,28 @@ export default function MonthlySummaryTab() {
         </span>
       </div>
 
-      {/* Totals hint */}
+      {/* Legend */}
       <div
-        className="rounded-lg p-3 text-sm"
+        className="rounded-lg p-3 text-xs flex flex-wrap gap-x-5 gap-y-1.5"
         style={{
           background: "oklch(0.76 0.15 85 / 0.05)",
           border: "1px solid oklch(0.76 0.15 85 / 0.15)",
         }}
       >
-        <p className="text-muted-foreground text-xs">
-          <span className="text-gold">Note:</span> Days Present is calculated
-          from earnings entries (days with recorded earnings). Days Absent ={" "}
-          {WORKING_DAYS_PER_MONTH} working days − Days Present. For full
-          attendance analytics, check the Analytics tab.
-        </p>
+        <span className="text-muted-foreground flex items-center gap-1.5">
+          <span
+            className="w-2 h-2 rounded-full inline-block"
+            style={{ background: "oklch(0.68 0.18 148)" }}
+          />
+          Present = days with check-in recorded
+        </span>
+        <span className="text-muted-foreground flex items-center gap-1.5">
+          <span
+            className="w-2 h-2 rounded-full inline-block"
+            style={{ background: "oklch(0.65 0.22 22)" }}
+          />
+          Late / Overtime / Early Exit = from timestamps
+        </span>
       </div>
 
       {/* Loading */}
@@ -295,6 +517,7 @@ export default function MonthlySummaryTab() {
                   staff={staff}
                   year={year}
                   month={month}
+                  halfDayRecords={halfDayRecords ?? []}
                   index={i}
                 />
               ))}

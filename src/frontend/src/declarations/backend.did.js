@@ -23,22 +23,6 @@ export const StaffProfile = IDL.Record({
   'shiftStart' : IDL.Text,
   'shiftEnd' : IDL.Text,
 });
-export const UserProfile = IDL.Record({ 'name' : IDL.Text, 'role' : IDL.Text });
-export const EarningsEntry = IDL.Record({
-  'id' : IDL.Nat,
-  'total' : IDL.Nat,
-  'staffId' : IDL.Nat,
-  'date' : IDL.Text,
-  'parts' : IDL.Vec(IDL.Nat),
-});
-export const NotificationEvent = IDL.Record({
-  'id' : IDL.Nat,
-  'staffName' : IDL.Text,
-  'staffId' : IDL.Nat,
-  'message' : IDL.Text,
-  'timestamp' : IDL.Int,
-  'eventType' : IDL.Variant({ 'checkIn' : IDL.Null, 'checkOut' : IDL.Null }),
-});
 export const AttendanceRecord = IDL.Record({
   'id' : IDL.Nat,
   'staffId' : IDL.Nat,
@@ -48,6 +32,28 @@ export const AttendanceRecord = IDL.Record({
   'checkInTime' : IDL.Opt(IDL.Int),
   'checkOutTime' : IDL.Opt(IDL.Int),
   'overtimeMinutes' : IDL.Nat,
+});
+export const UserProfile = IDL.Record({ 'name' : IDL.Text, 'role' : IDL.Text });
+export const EarningsEntry = IDL.Record({
+  'id' : IDL.Nat,
+  'total' : IDL.Nat,
+  'staffId' : IDL.Nat,
+  'date' : IDL.Text,
+  'parts' : IDL.Vec(IDL.Nat),
+});
+export const HalfDayRecord = IDL.Record({
+  'id' : IDL.Nat,
+  'staffId' : IDL.Nat,
+  'date' : IDL.Text,
+  'markedAt' : IDL.Int,
+});
+export const NotificationEvent = IDL.Record({
+  'id' : IDL.Nat,
+  'staffName' : IDL.Text,
+  'staffId' : IDL.Nat,
+  'message' : IDL.Text,
+  'timestamp' : IDL.Int,
+  'eventType' : IDL.Variant({ 'checkIn' : IDL.Null, 'checkOut' : IDL.Null }),
 });
 
 export const idlService = IDL.Service({
@@ -66,11 +72,26 @@ export const idlService = IDL.Service({
   'checkIn' : IDL.Func([IDL.Nat], [IDL.Int], []),
   'checkOut' : IDL.Func([IDL.Nat], [IDL.Int], []),
   'getAllStaff' : IDL.Func([], [IDL.Vec(StaffProfile)], ['query']),
+  'getAttendanceByDate' : IDL.Func(
+      [IDL.Text],
+      [IDL.Vec(AttendanceRecord)],
+      ['query'],
+    ),
   'getCallerUserProfile' : IDL.Func([], [IDL.Opt(UserProfile)], ['query']),
   'getCallerUserRole' : IDL.Func([], [UserRole], ['query']),
   'getEarningsByStaffAndMonth' : IDL.Func(
       [IDL.Nat, IDL.Nat, IDL.Nat],
       [IDL.Vec(EarningsEntry)],
+      ['query'],
+    ),
+  'getHalfDaysByDate' : IDL.Func(
+      [IDL.Text],
+      [IDL.Vec(HalfDayRecord)],
+      ['query'],
+    ),
+  'getHalfDaysByMonth' : IDL.Func(
+      [IDL.Nat, IDL.Nat],
+      [IDL.Vec(HalfDayRecord)],
       ['query'],
     ),
   'getRecentNotifications' : IDL.Func(
@@ -86,6 +107,8 @@ export const idlService = IDL.Service({
       ['query'],
     ),
   'isCallerAdmin' : IDL.Func([], [IDL.Bool], ['query']),
+  'markHalfDay' : IDL.Func([IDL.Text, IDL.Nat, IDL.Text], [IDL.Nat], []),
+  'removeHalfDay' : IDL.Func([IDL.Text, IDL.Nat, IDL.Text], [], []),
   'removeStaff' : IDL.Func([IDL.Text, IDL.Nat], [], []),
   'saveCallerUserProfile' : IDL.Func([UserProfile], [], []),
   'updateStaff' : IDL.Func(
@@ -123,22 +146,6 @@ export const idlFactory = ({ IDL }) => {
     'shiftStart' : IDL.Text,
     'shiftEnd' : IDL.Text,
   });
-  const UserProfile = IDL.Record({ 'name' : IDL.Text, 'role' : IDL.Text });
-  const EarningsEntry = IDL.Record({
-    'id' : IDL.Nat,
-    'total' : IDL.Nat,
-    'staffId' : IDL.Nat,
-    'date' : IDL.Text,
-    'parts' : IDL.Vec(IDL.Nat),
-  });
-  const NotificationEvent = IDL.Record({
-    'id' : IDL.Nat,
-    'staffName' : IDL.Text,
-    'staffId' : IDL.Nat,
-    'message' : IDL.Text,
-    'timestamp' : IDL.Int,
-    'eventType' : IDL.Variant({ 'checkIn' : IDL.Null, 'checkOut' : IDL.Null }),
-  });
   const AttendanceRecord = IDL.Record({
     'id' : IDL.Nat,
     'staffId' : IDL.Nat,
@@ -148,6 +155,28 @@ export const idlFactory = ({ IDL }) => {
     'checkInTime' : IDL.Opt(IDL.Int),
     'checkOutTime' : IDL.Opt(IDL.Int),
     'overtimeMinutes' : IDL.Nat,
+  });
+  const UserProfile = IDL.Record({ 'name' : IDL.Text, 'role' : IDL.Text });
+  const EarningsEntry = IDL.Record({
+    'id' : IDL.Nat,
+    'total' : IDL.Nat,
+    'staffId' : IDL.Nat,
+    'date' : IDL.Text,
+    'parts' : IDL.Vec(IDL.Nat),
+  });
+  const HalfDayRecord = IDL.Record({
+    'id' : IDL.Nat,
+    'staffId' : IDL.Nat,
+    'date' : IDL.Text,
+    'markedAt' : IDL.Int,
+  });
+  const NotificationEvent = IDL.Record({
+    'id' : IDL.Nat,
+    'staffName' : IDL.Text,
+    'staffId' : IDL.Nat,
+    'message' : IDL.Text,
+    'timestamp' : IDL.Int,
+    'eventType' : IDL.Variant({ 'checkIn' : IDL.Null, 'checkOut' : IDL.Null }),
   });
   
   return IDL.Service({
@@ -166,11 +195,26 @@ export const idlFactory = ({ IDL }) => {
     'checkIn' : IDL.Func([IDL.Nat], [IDL.Int], []),
     'checkOut' : IDL.Func([IDL.Nat], [IDL.Int], []),
     'getAllStaff' : IDL.Func([], [IDL.Vec(StaffProfile)], ['query']),
+    'getAttendanceByDate' : IDL.Func(
+        [IDL.Text],
+        [IDL.Vec(AttendanceRecord)],
+        ['query'],
+      ),
     'getCallerUserProfile' : IDL.Func([], [IDL.Opt(UserProfile)], ['query']),
     'getCallerUserRole' : IDL.Func([], [UserRole], ['query']),
     'getEarningsByStaffAndMonth' : IDL.Func(
         [IDL.Nat, IDL.Nat, IDL.Nat],
         [IDL.Vec(EarningsEntry)],
+        ['query'],
+      ),
+    'getHalfDaysByDate' : IDL.Func(
+        [IDL.Text],
+        [IDL.Vec(HalfDayRecord)],
+        ['query'],
+      ),
+    'getHalfDaysByMonth' : IDL.Func(
+        [IDL.Nat, IDL.Nat],
+        [IDL.Vec(HalfDayRecord)],
         ['query'],
       ),
     'getRecentNotifications' : IDL.Func(
@@ -186,6 +230,8 @@ export const idlFactory = ({ IDL }) => {
         ['query'],
       ),
     'isCallerAdmin' : IDL.Func([], [IDL.Bool], ['query']),
+    'markHalfDay' : IDL.Func([IDL.Text, IDL.Nat, IDL.Text], [IDL.Nat], []),
+    'removeHalfDay' : IDL.Func([IDL.Text, IDL.Nat, IDL.Text], [], []),
     'removeStaff' : IDL.Func([IDL.Text, IDL.Nat], [], []),
     'saveCallerUserProfile' : IDL.Func([UserProfile], [], []),
     'updateStaff' : IDL.Func(

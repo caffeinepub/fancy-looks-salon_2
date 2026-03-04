@@ -29,8 +29,8 @@ interface StaffPortalPageProps {
   onBack: () => void;
 }
 
-function formatNanoTimestamp(ns: bigint | undefined): string {
-  if (!ns) return "—";
+function formatNanoTimestamp(ns: bigint | undefined | null): string {
+  if (ns == null) return "—";
   const ms = Number(ns / 1_000_000n);
   return new Date(ms).toLocaleString(undefined, {
     month: "short",
@@ -41,8 +41,9 @@ function formatNanoTimestamp(ns: bigint | undefined): string {
   });
 }
 
-function getTodayDate(): string {
-  return new Date().toISOString().slice(0, 10).replace(/-/g, "");
+/** Returns epoch-days string (same format as backend stores) */
+function getTodayEpochDays(): string {
+  return Math.floor(Date.now() / (24 * 60 * 60 * 1000)).toString();
 }
 
 function parseEarningsParts(input: string): bigint[] {
@@ -58,13 +59,41 @@ function sumParts(parts: bigint[]): bigint {
   return parts.reduce((a, b) => a + b, 0n);
 }
 
+/** Compute late info from raw check-in timestamp vs shift start */
+function computeLateInfo(
+  checkInTime: bigint,
+  shiftStart: string,
+): { isLate: boolean; lateMinutes: number } {
+  const ms = Number(checkInTime / 1_000_000n);
+  const d = new Date(ms);
+  const checkInMins = d.getHours() * 60 + d.getMinutes();
+  const [sh, sm] = shiftStart.split(":").map(Number);
+  const shiftStartMins = (sh ?? 0) * 60 + (sm ?? 0);
+  const diff = checkInMins - shiftStartMins;
+  return { isLate: diff > 5, lateMinutes: diff > 5 ? diff : 0 };
+}
+
+/** Compute overtime / early-exit info from raw check-out timestamp vs shift end */
+function computeOvertimeInfo(
+  checkOutTime: bigint,
+  shiftEnd: string,
+): { isEarlyExit: boolean; overtimeMinutes: number } {
+  const ms = Number(checkOutTime / 1_000_000n);
+  const d = new Date(ms);
+  const checkOutMins = d.getHours() * 60 + d.getMinutes();
+  const [eh, em] = shiftEnd.split(":").map(Number);
+  const shiftEndMins = (eh ?? 0) * 60 + (em ?? 0);
+  const diff = checkOutMins - shiftEndMins;
+  return { isEarlyExit: diff < -5, overtimeMinutes: diff > 5 ? diff : 0 };
+}
+
 export default function StaffPortalPage({
   staff,
   onBack,
 }: StaffPortalPageProps) {
   const queryClient = useQueryClient();
   const { actor, isFetching } = useActor();
-  const todayDate = getTodayDate();
+  const todayDate = getTodayEpochDays();
 
   const [earningsInput, setEarningsInput] = useState<string | null>(null);
 
@@ -107,7 +136,7 @@ export default function StaffPortalPage({
     (r) => r.staffId === staff.id || String(r.staffId) === String(staff.id),
   );
 
-  // Find today's earnings
+  // Find today's earnings — compare using epoch-days format (matches backend)
   const todayEarnings: EarningsEntry | undefined = earningsList?.find(
     (e) => e.date === todayDate,
   );
@@ -120,12 +149,25 @@ export default function StaffPortalPage({
         ? todayEarnings.parts.map(String).join("+")
         : "";
 
+  // Robust check-in/out state using null-safe comparisons
   const isCheckedIn =
-    todayAttendance?.checkInTime !== undefined &&
-    todayAttendance?.checkOutTime === undefined;
+    !!todayAttendance &&
+    todayAttendance.checkInTime != null &&
+    todayAttendance.checkOutTime == null;
   const isCheckedOut =
-    todayAttendance?.checkInTime !== undefined &&
-    todayAttendance?.checkOutTime !== undefined;
+    !!todayAttendance &&
+    todayAttendance.checkInTime != null &&
+    todayAttendance.checkOutTime != null;
+
+  // Frontend-computed late/overtime info (more reliable than backend flags)
+  const lateInfo =
+    todayAttendance?.checkInTime != null
+      ? computeLateInfo(todayAttendance.checkInTime, staff.shiftStart)
+      : null;
+  const overtimeInfo =
+    todayAttendance?.checkOutTime != null
+      ? computeOvertimeInfo(todayAttendance.checkOutTime, staff.shiftEnd)
+      : null;
 
   // Check-in mutation
   const checkInMutation = useMutation({
@@ -391,13 +433,13 @@ export default function StaffPortalPage({
           </div>
 
           {/* Timestamps */}
-          {todayAttendance?.checkInTime && (
+          {todayAttendance?.checkInTime != null && (
             <div className="text-sm space-y-1">
               <p className="text-muted-foreground">
                 <span className="text-foreground font-medium">Check-In:</span>{" "}
                 {formatNanoTimestamp(todayAttendance.checkInTime)}
               </p>
-              {todayAttendance.checkOutTime && (
+              {todayAttendance.checkOutTime != null && (
                 <p className="text-muted-foreground">
                   <span className="text-foreground font-medium">
                     Check-Out:
@@ -408,10 +450,10 @@ export default function StaffPortalPage({
             </div>
           )}
 
-          {/* Flags */}
+          {/* Flags — frontend-computed (reliable) */}
           {!staff.isPremium && todayAttendance && (
             <div className="flex flex-wrap gap-2">
-              {todayAttendance.isLate && (
+              {lateInfo?.isLate && (
                 <span
                   className="text-xs px-2 py-0.5 rounded-full font-medium"
                   style={{
@@ -420,10 +462,10 @@ export default function StaffPortalPage({
                     border: "1px solid oklch(0.60 0.22 22 / 0.3)",
                   }}
                 >
-                  Late Joining
+                  Late +{lateInfo.lateMinutes}m
                 </span>
               )}
-              {todayAttendance.isEarlyExit && (
+              {overtimeInfo?.isEarlyExit && (
                 <span
                   className="text-xs px-2 py-0.5 rounded-full font-medium"
                   style={{
@@ -435,7 +477,7 @@ export default function StaffPortalPage({
                   Early Exit
                 </span>
               )}
-              {todayAttendance.overtimeMinutes > 0n && (
+              {overtimeInfo != null && overtimeInfo.overtimeMinutes > 0 && (
                 <span
                   className="text-xs px-2 py-0.5 rounded-full font-medium"
                   style={{
@@ -444,9 +486,24 @@ export default function StaffPortalPage({
                     border: "1px solid oklch(0.76 0.15 85 / 0.3)",
                   }}
                 >
-                  +{String(todayAttendance.overtimeMinutes)} min OT
+                  Extra Time +{overtimeInfo.overtimeMinutes}m
                 </span>
               )}
+              {!lateInfo?.isLate &&
+                !overtimeInfo?.isEarlyExit &&
+                !(overtimeInfo != null && overtimeInfo.overtimeMinutes > 0) &&
+                todayAttendance.checkInTime != null && (
+                  <span
+                    className="text-xs px-2 py-0.5 rounded-full font-medium"
+                    style={{
+                      background: "oklch(0.68 0.18 148 / 0.1)",
+                      color: "oklch(0.68 0.18 148)",
+                      border: "1px solid oklch(0.68 0.18 148 / 0.25)",
+                    }}
+                  >
+                    ✓ On Time
+                  </span>
+                )}
             </div>
           )}
           {staff.isPremium && (
