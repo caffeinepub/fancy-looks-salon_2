@@ -1,0 +1,208 @@
+@import url("https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;500;600;700&family=Cabinet+Grotesk:wght@300;400;500;600;700&display=swap");
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    /* Dark luxury theme — gold, black, charcoal */
+    --background: 0.13 0.006 60;
+    --foreground: 0.96 0.012 85;
+
+    --card: 0.16 0.006 60;
+    --card-foreground: 0.96 0.012 85;
+
+    --popover: 0.16 0.006 60;
+    --popover-foreground: 0.96 0.012 85;
+
+    --primary: 0.76 0.15 85;
+    --primary-foreground: 0.13 0.006 60;
+
+    --secondary: 0.22 0.008 60;
+    --secondary-foreground: 0.8 0.012 85;
+
+    --muted: 0.22 0.008 60;
+    --muted-foreground: 0.55 0.01 80;
+
+    --accent: 0.22 0.008 60;
+    --accent-foreground: 0.96 0.012 85;
+
+    --destructive: 0.6 0.22 22;
+    --destructive-foreground: 0.96 0.012 85;
+
+    --border: 0.24 0.008 70 / 0.6;
+    --input: 0.2 0.008 60;
+    --ring: 0.76 0.15 85;
+
+    --gold: 0.76 0.15 85;
+    --gold-dim: 0.65 0.12 85;
+    --gold-bright: 0.85 0.16 85;
+
+    --success: 0.68 0.18 148;
+    --success-foreground: 0.13 0.006 60;
+
+    --radius: 0.75rem;
+
+    --chart-1: 0.76 0.15 85;
+    --chart-2: 0.68 0.18 148;
+    --chart-3: 0.65 0.22 22;
+    --chart-4: 0.65 0.18 270;
+    --chart-5: 0.68 0.2 45;
+
+    --sidebar: 0.14 0.006 60;
+    --sidebar-foreground: 0.96 0.012 85;
+    --sidebar-primary: 0.76 0.15 85;
+    --sidebar-primary-foreground: 0.13 0.006 60;
+    --sidebar-accent: 0.2 0.008 60;
+    --sidebar-accent-foreground: 0.96 0.012 85;
+    --sidebar-border: 0.24 0.008 70 / 0.4;
+    --sidebar-ring: 0.76 0.15 85;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+    font-family: "Cabinet Grotesk", ui-sans-serif, system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6 {
+    font-family: "Playfair Display", Georgia, serif;
+  }
+}
+
+@layer components {
+  /* Luxury card style */
+  .luxury-card {
+    background: oklch(0.16 0.006 60);
+    border: 1px solid oklch(0.76 0.15 85 / 0.15);
+    box-shadow: 0 2px 20px oklch(0 0 0 / 0.4);
+    transition: border-color 0.2s ease, box-shadow 0.2s ease;
+  }
+
+  .luxury-card:hover {
+    border-color: oklch(0.76 0.15 85 / 0.25);
+    box-shadow: 0 4px 30px oklch(0 0 0 / 0.5), 0 0 20px
+      oklch(0.76 0.15 85 / 0.05);
+  }
+
+  /* Gold gradient text */
+  .gold-text-gradient {
+    background: linear-gradient(
+      135deg,
+      oklch(0.85 0.16 85),
+      oklch(0.76 0.15 85),
+      oklch(0.65 0.12 80)
+    );
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  /* Gold border glow */
+  .gold-glow {
+    box-shadow: 0 0 20px oklch(0.76 0.15 85 / 0.25), 0 0 40px
+      oklch(0.76 0.15 85 / 0.1);
+  }
+
+  /* Gold spinner */
+  .gold-spinner {
+    width: 2rem;
+    height: 2rem;
+    border-radius: 50%;
+    border: 2px solid oklch(0.76 0.15 85 / 0.2);
+    border-top-color: oklch(0.76 0.15 85);
+    animation: spin 0.8s linear infinite;
+  }
+
+  /* Decorative divider */
+  .gold-divider {
+    height: 1px;
+    background: linear-gradient(
+      to right,
+      transparent,
+      oklch(0.76 0.15 85 / 0.4),
+      transparent
+    );
+  }
+
+  /* Gold button */
+  .btn-gold {
+    background: linear-gradient(135deg, oklch(0.8 0.16 85), oklch(0.7 0.14 85));
+    color: oklch(0.13 0.006 60);
+    font-weight: 600;
+    transition: all 0.2s ease;
+    box-shadow: 0 2px 12px oklch(0.76 0.15 85 / 0.3);
+  }
+
+  .btn-gold:hover {
+    background: linear-gradient(
+      135deg,
+      oklch(0.85 0.17 85),
+      oklch(0.76 0.15 85)
+    );
+    box-shadow: 0 4px 20px oklch(0.76 0.15 85 / 0.45);
+    transform: translateY(-1px);
+  }
+
+  .btn-gold:active {
+    transform: translateY(0);
+  }
+}
+
+@layer utilities {
+  .text-gold {
+    color: oklch(0.76 0.15 85);
+  }
+
+  .bg-gold {
+    background-color: oklch(0.76 0.15 85);
+  }
+
+  .border-gold {
+    border-color: oklch(0.76 0.15 85);
+  }
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* Scrollbar styling */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: oklch(0.13 0.006 60);
+}
+
+::-webkit-scrollbar-thumb {
+  background: oklch(0.76 0.15 85 / 0.3);
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: oklch(0.76 0.15 85 / 0.5);
+}
+
+/* Input focus styles */
+input[type="month"]::-webkit-calendar-picker-indicator {
+  filter: invert(0.8) sepia(0.5) saturate(2) hue-rotate(10deg);
+  cursor: pointer;
+}

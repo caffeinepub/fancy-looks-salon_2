@@ -1,6 +1,6 @@
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { ArrowLeft, Crown, Eye, EyeOff, Lock, Scissors } from "lucide-react";
+import { ArrowLeft, Crown, Eye, EyeOff, Lock } from "lucide-react";
 import { motion } from "motion/react";
 import { useState } from "react";
 import { toast } from "sonner";
@@ -92,7 +92,11 @@ export default function AdminLoginPage({
 
       {/* Salon brand */}
       <div className="absolute top-5 right-6 flex items-center gap-2 z-10">
-        <Scissors className="w-4 h-4 text-gold" />
+        <img
+          src="/assets/uploads/IMG_20251223_151630-1.jpg"
+          className="w-6 h-6 rounded-full object-cover"
+          alt="logo"
+        />
         <span className="font-display text-gold text-sm font-semibold tracking-wide">
           Fancy Looks Salon
         </span>

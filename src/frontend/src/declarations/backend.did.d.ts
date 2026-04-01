@@ -69,6 +69,7 @@ export interface _SERVICE {
   'assignCallerUserRole' : ActorMethod<[Principal, UserRole], undefined>,
   'checkIn' : ActorMethod<[bigint], bigint>,
   'checkOut' : ActorMethod<[bigint], bigint>,
+  'cleanOldNotifications' : ActorMethod<[string], bigint>,
   'getAllStaff' : ActorMethod<[], Array<StaffProfile>>,
   'getAttendanceByDate' : ActorMethod<[string], Array<AttendanceRecord>>,
   'getCallerUserProfile' : ActorMethod<[], [] | [UserProfile]>,

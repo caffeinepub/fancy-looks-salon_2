@@ -68,19 +68,9 @@ export default function HomePage({
             }}
           >
             <img
-              src="/assets/generated/fancy-looks-logo-transparent.dim_200x200.png"
+              src="/assets/uploads/IMG_20251223_151630-1.jpg"
               alt="Fancy Looks Salon Logo"
-              className="w-20 h-20 object-contain"
-              onError={(e) => {
-                const target = e.currentTarget as HTMLImageElement;
-                target.style.display = "none";
-                const parent = target.parentElement;
-                if (parent) {
-                  const fallback = document.createElement("div");
-                  fallback.innerHTML = `<svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="oklch(0.76 0.15 85)" stroke-width="1.5"><path d="M6 3a2 2 0 0 1 2 2v7.17A6 6 0 0 1 6 20a6 6 0 0 1-2-11.83V5a2 2 0 0 1 2-2Zm12 0a2 2 0 0 1 2 2v7.17A6 6 0 0 1 18 20a6 6 0 0 1-2-11.83V5a2 2 0 0 1 2-2Z"/></svg>`;
-                  parent.appendChild(fallback);
-                }
-              }}
+              className="w-full h-full object-cover rounded-full"
             />
           </div>
           {/* Rotating ornament ring */}

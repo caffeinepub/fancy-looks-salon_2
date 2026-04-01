@@ -1,5 +1,5 @@
 import Map "mo:core/Map";
-import ArrayUtil "mo:core/Array";
+import Array "mo:core/Array";
 import Order "mo:core/Order";
 import Time "mo:core/Time";
 import Nat "mo:core/Nat";
@@ -8,8 +8,7 @@ import Principal "mo:core/Principal";
 import Runtime "mo:core/Runtime";
 import MixinAuthorization "authorization/MixinAuthorization";
 import AccessControl "authorization/access-control";
-
-
+import Iter "mo:core/Iter";
 
 actor {
   let accessControlState = AccessControl.initState();
@@ -418,6 +417,24 @@ actor {
     } else {
       sortedNotifications.sliceToArray(0, limit);
     };
+  };
+
+  // NEW FUNCTION: Clean old notifications
+  public shared ({ caller }) func cleanOldNotifications(adminPassword : Text) : async Nat {
+    verifyAdminPasswordOrTrap(adminPassword);
+
+    let todayDayNumber = Time.now() / (24 * 60 * 60 * 1_000_000_000);
+
+    var deletedCount = 0;
+
+    for ((id, event) in notificationEvents.entries()) {
+      let eventDayNumber = event.timestamp / (24 * 60 * 60 * 1_000_000_000);
+      if (eventDayNumber < todayDayNumber) {
+        notificationEvents.remove(id);
+        deletedCount += 1;
+      };
+    };
+    deletedCount;
   };
 
   // ADMIN AUTH (open query for password verification)

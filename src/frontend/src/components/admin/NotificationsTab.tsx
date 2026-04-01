@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { Bell, LogIn, LogOut, RefreshCw } from "lucide-react";
 import { motion } from "motion/react";
+import { useEffect } from "react";
 import {
   type NotificationEvent,
   Variant_checkIn_checkOut,
@@ -105,6 +106,23 @@ export default function NotificationsTab() {
     enabled: !!actor && !isFetching,
     refetchInterval: 30_000,
   });
+
+  // Auto-clean old notifications daily at 1 AM
+  useEffect(() => {
+    if (!actor) return;
+    const today = new Date().toDateString();
+    const lastClean = localStorage.getItem("lastNotifClean");
+    const currentHour = new Date().getHours();
+    if (currentHour >= 1 && lastClean !== today) {
+      actor
+        .cleanOldNotifications("Fancy0308")
+        .then(() => {
+          localStorage.setItem("lastNotifClean", today);
+          refetch();
+        })
+        .catch(() => {}); // silent fail
+    }
+  }, [actor, refetch]);
 
   const sortedNotifications = (notifications ?? [])
     .slice()

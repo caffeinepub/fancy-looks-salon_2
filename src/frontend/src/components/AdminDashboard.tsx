@@ -1,6 +1,6 @@
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Crown, LogOut, Scissors } from "lucide-react";
+import { Crown, LogOut } from "lucide-react";
 import { motion } from "motion/react";
 import { useState } from "react";
 import AnalyticsTab from "./admin/AnalyticsTab";
@@ -28,13 +28,16 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
       >
         <div className="flex items-center gap-2.5">
           <div
-            className="w-7 h-7 rounded-full flex items-center justify-center"
+            className="w-7 h-7 rounded-full overflow-hidden flex items-center justify-center"
             style={{
-              background: "oklch(0.76 0.15 85 / 0.15)",
               border: "1px solid oklch(0.76 0.15 85 / 0.35)",
             }}
           >
-            <Scissors className="w-3.5 h-3.5 text-gold" />
+            <img
+              src="/assets/uploads/IMG_20251223_151630-1.jpg"
+              className="w-5 h-5 rounded-full object-cover"
+              alt="logo"
+            />
           </div>
           <span className="font-display text-gold font-semibold text-base tracking-wide hidden sm:block">
             Fancy Looks Salon

@@ -150,6 +150,7 @@ export interface backendInterface {
     assignCallerUserRole(user: Principal, role: UserRole): Promise<void>;
     checkIn(staffId: bigint): Promise<bigint>;
     checkOut(staffId: bigint): Promise<bigint>;
+    cleanOldNotifications(adminPassword: string): Promise<bigint>;
     getAllStaff(): Promise<Array<StaffProfile>>;
     getAttendanceByDate(date: string): Promise<Array<AttendanceRecord>>;
     getCallerUserProfile(): Promise<UserProfile | null>;
@@ -253,6 +254,20 @@ export class Backend implements backendInterface {
             }
         } else {
             const result = await this.actor.checkOut(arg0);
+            return result;
+        }
+    }
+    async cleanOldNotifications(arg0: string): Promise<bigint> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.cleanOldNotifications(arg0);
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.cleanOldNotifications(arg0);
             return result;
         }
     }

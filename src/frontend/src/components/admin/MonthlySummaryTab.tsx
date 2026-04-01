@@ -78,6 +78,15 @@ function computeOvertimeInfo(
   return { isEarlyExit: diff < -5, overtimeMinutes: diff > 5 ? diff : 0 };
 }
 
+function formatMinutes(mins: number): string {
+  if (mins <= 0) return "0 min";
+  const h = Math.floor(mins / 60);
+  const m = mins % 60;
+  if (h > 0 && m > 0) return `${h}h ${m}m`;
+  if (h > 0) return `${h}h`;
+  return `${m}m`;
+}
+
 function StaffMonthlySummary({
   staff,
   year,
@@ -152,6 +161,11 @@ function StaffMonthlySummary({
       r.checkOutTime != null &&
       computeOvertimeInfo(r.checkOutTime, staff.shiftEnd).overtimeMinutes > 0,
   ).length;
+  const totalOvertimeMinutes = att.reduce((sum, r) => {
+    if (r.checkOutTime == null) return sum;
+    const info = computeOvertimeInfo(r.checkOutTime, staff.shiftEnd);
+    return sum + info.overtimeMinutes;
+  }, 0);
   const earlyExitDays = att.filter(
     (r) =>
       r.checkOutTime != null &&
@@ -276,6 +290,11 @@ function StaffMonthlySummary({
                 color="oklch(0.76 0.15 85)"
                 bg="oklch(0.76 0.15 85 / 0.08)"
                 border="oklch(0.76 0.15 85 / 0.2)"
+                subValue={
+                  totalOvertimeMinutes > 0
+                    ? `${formatMinutes(totalOvertimeMinutes)} total`
+                    : undefined
+                }
               />
               <AnalyticStatBox
                 icon={<LogOut className="w-3 h-3" />}
@@ -362,6 +381,7 @@ function AnalyticStatBox({
   color,
   bg,
   border,
+  subValue,
 }: {
   icon: React.ReactNode;
   value: number;
@@ -369,6 +389,7 @@ function AnalyticStatBox({
   color: string;
   bg: string;
   border: string;
+  subValue?: string;
 }) {
   return (
     <div
@@ -382,6 +403,11 @@ function AnalyticStatBox({
         </p>
       </div>
       <p className="text-[11px] text-muted-foreground">{label}</p>
+      {subValue && (
+        <p className="text-[10px] text-muted-foreground opacity-70 mt-0.5">
+          {subValue}
+        </p>
+      )}
     </div>
   );
 }
