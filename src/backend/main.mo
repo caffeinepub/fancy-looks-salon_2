@@ -10,7 +10,10 @@ import MixinAuthorization "authorization/MixinAuthorization";
 import AccessControl "authorization/access-control";
 import Iter "mo:core/Iter";
 
+
+
 actor {
+  // Keep these stable variables for upgrade compatibility
   let accessControlState = AccessControl.initState();
   include MixinAuthorization(accessControlState);
 
@@ -74,6 +77,7 @@ actor {
     markedAt : Int;
   };
 
+  // Keep userProfiles for upgrade compatibility
   let userProfiles = Map.empty<Principal, UserProfile>();
   let staffProfiles = Map.empty<Nat, StaffProfile>();
   let attendanceRecords = Map.empty<Nat, AttendanceRecord>();
@@ -162,7 +166,7 @@ actor {
     } else { 0 };
   };
 
-  // STAFF MANAGEMENT (no AccessControl check for admin functions, password only)
+  // STAFF MANAGEMENT - Password protected only
   public shared func addStaff(
     adminPassword : Text,
     name : Text,
@@ -221,7 +225,6 @@ actor {
 
   public shared func removeStaff(adminPassword : Text, id : Nat) : async () {
     verifyAdminPasswordOrTrap(adminPassword);
-
     if (not staffProfiles.containsKey(id)) { Runtime.trap("Staff not found") };
     staffProfiles.remove(id);
   };
@@ -238,7 +241,7 @@ actor {
     };
   };
 
-  // ATTENDANCE (no AccessControl check, open to all)
+  // ATTENDANCE - Open (no auth needed)
   public shared func checkIn(staffId : Nat) : async Int {
     let timestamp = getCurrentTime();
     let staffProfile = switch (staffProfiles.get(staffId)) {
@@ -265,9 +268,7 @@ actor {
       staffName = staffProfile.name;
       eventType = #checkIn;
       timestamp;
-      message = if (attendance.isLate) {
-        "You are Late";
-      } else { "Check-in successful" };
+      message = if (attendance.isLate) { "You are Late" } else { "Check-in successful" };
     };
 
     notificationEvents.add(nextNotificationId, notification);
@@ -328,6 +329,7 @@ actor {
 
   public shared func updateCheckInTime(adminPassword : Text, staffId : Nat, date : Text, newCheckInHour : Nat, newCheckInMinute : Nat) : async () {
     verifyAdminPasswordOrTrap(adminPassword);
+
     let staffProfile = switch (staffProfiles.get(staffId)) {
       case (null) { Runtime.trap("Staff not found") };
       case (?profile) { profile };
@@ -356,6 +358,50 @@ actor {
     attendanceRecords.add(attendanceId, updated);
   };
 
+  public shared func updateCheckOutTime(
+    adminPassword : Text,
+    staffId : Nat,
+    date : Text,
+    newCheckOutHour : Nat,
+    newCheckOutMinute : Nat,
+  ) : async () {
+    verifyAdminPasswordOrTrap(adminPassword);
+
+    let staffProfile = switch (staffProfiles.get(staffId)) {
+      case (null) { Runtime.trap("Staff not found") };
+      case (?profile) { profile };
+    };
+
+    var foundId : ?Nat = null;
+    for ((id, record) in attendanceRecords.entries()) {
+      if (record.staffId == staffId and record.date == date) {
+        foundId := ?id;
+      };
+    };
+
+    let attendanceId = switch (foundId) {
+      case (null) { Runtime.trap("Attendance record not found for this date") };
+      case (?id) { id };
+    };
+
+    let existing = switch (attendanceRecords.get(attendanceId)) {
+      case (null) { Runtime.trap("Attendance record not found") };
+      case (?r) { r };
+    };
+
+    let dayStartNs : Int = (Time.now() / (24 * 60 * 60 * 1_000_000_000)) * (24 * 60 * 60 * 1_000_000_000);
+    let newCheckOutTime : Int = dayStartNs + (newCheckOutHour * 60 + newCheckOutMinute) * 60 * 1_000_000_000;
+
+    let updated : AttendanceRecord = {
+      existing with
+      checkOutTime = ?newCheckOutTime;
+      isEarlyExit = isEarlyExit(newCheckOutTime, staffProfile.shiftEnd);
+      overtimeMinutes = calculateOvertimeMinutes(newCheckOutTime, staffProfile.shiftEnd);
+    };
+
+    attendanceRecords.add(attendanceId, updated);
+  };
+
   public query func getTodayAttendance() : async [AttendanceRecord] {
     let today = (Time.now() / (24 * 60 * 60 * 1_000_000_000)).toText();
     attendanceRecords.values().toArray().filter(func(record) { record.date == today });
@@ -365,13 +411,12 @@ actor {
     attendanceRecords.values().toArray().filter(func(record) { record.date == date });
   };
 
-  // HALF DAY RECORDS (no AccessControl check, password only)
+  // HALF DAY RECORDS - Password protected
   public shared func markHalfDay(adminPassword : Text, staffId : Nat, date : Text) : async Nat {
     verifyAdminPasswordOrTrap(adminPassword);
 
     if (not staffProfiles.containsKey(staffId)) { Runtime.trap("Staff not found") };
 
-    // Check if already exists for same staffId+date
     let existing = halfDayRecords.values().toArray().find(
       func(record) { record.staffId == staffId and record.date == date },
     );
@@ -412,7 +457,7 @@ actor {
     halfDayRecords.values().toArray();
   };
 
-  // EARNINGS (no AccessControl check, password only)
+  // EARNINGS - Password protected
   public shared func addOrUpdateEarningsEntry(adminPassword : Text, staffId : Nat, date : Text, parts : [Nat]) : async Nat {
     verifyAdminPasswordOrTrap(adminPassword);
 
@@ -438,7 +483,7 @@ actor {
     earningsEntries.values().toArray().filter(func(entry) { entry.staffId == staffId });
   };
 
-  // NOTIFICATIONS (open query)
+  // NOTIFICATIONS
   public query func getRecentNotifications(limit : Nat) : async [NotificationEvent] {
     let allNotifications = notificationEvents.values().toArray();
     let sortedNotifications = allNotifications.reverse();
@@ -449,12 +494,10 @@ actor {
     };
   };
 
-  // NEW FUNCTION: Clean old notifications
-  public shared ({ caller }) func cleanOldNotifications(adminPassword : Text) : async Nat {
+  public shared func cleanOldNotifications(adminPassword : Text) : async Nat {
     verifyAdminPasswordOrTrap(adminPassword);
 
     let todayDayNumber = Time.now() / (24 * 60 * 60 * 1_000_000_000);
-
     var deletedCount = 0;
 
     for ((id, event) in notificationEvents.entries()) {
@@ -467,30 +510,17 @@ actor {
     deletedCount;
   };
 
-  // ADMIN AUTH (open query for password verification)
+  // ADMIN AUTH
   public query func verifyAdminPassword(password : Text) : async Bool {
     verifyAdminPasswordInternal(password);
   };
 
-  // USER PROFILES (accessible to caller with AccessControl)
+  // Keep user profile functions for upgrade compatibility
   public query ({ caller }) func getCallerUserProfile() : async ?UserProfile {
-    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
-      Runtime.trap("Unauthorized: Only users can view profiles");
-    };
     userProfiles.get(caller);
   };
 
-  public query ({ caller }) func getUserProfile(user : Principal) : async ?UserProfile {
-    if (caller != user and not AccessControl.isAdmin(accessControlState, caller)) {
-      Runtime.trap("Unauthorized: Can only view your own profile");
-    };
-    userProfiles.get(user);
-  };
-
   public shared ({ caller }) func saveCallerUserProfile(profile : UserProfile) : async () {
-    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
-      Runtime.trap("Unauthorized: Only users can save profiles");
-    };
     userProfiles.add(caller, profile);
   };
 };

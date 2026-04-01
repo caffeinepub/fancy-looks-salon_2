@@ -167,6 +167,8 @@ export interface backendInterface {
     removeHalfDay(adminPassword: string, staffId: bigint, date: string): Promise<void>;
     removeStaff(adminPassword: string, id: bigint): Promise<void>;
     saveCallerUserProfile(profile: UserProfile): Promise<void>;
+    updateCheckInTime(adminPassword: string, staffId: bigint, date: string, newCheckInHour: bigint, newCheckInMinute: bigint): Promise<void>;
+    updateCheckOutTime(adminPassword: string, staffId: bigint, date: string, newCheckOutHour: bigint, newCheckOutMinute: bigint): Promise<void>;
     updateStaff(adminPassword: string, id: bigint, name: string, photoUrl: string, shiftStart: string, shiftEnd: string, isPremium: boolean, isActive: boolean): Promise<void>;
     verifyAdminPassword(password: string): Promise<boolean>;
 }
@@ -492,6 +494,34 @@ export class Backend implements backendInterface {
             }
         } else {
             const result = await this.actor.saveCallerUserProfile(arg0);
+            return result;
+        }
+    }
+    async updateCheckInTime(arg0: string, arg1: bigint, arg2: string, arg3: bigint, arg4: bigint): Promise<void> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.updateCheckInTime(arg0, arg1, arg2, arg3, arg4);
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.updateCheckInTime(arg0, arg1, arg2, arg3, arg4);
+            return result;
+        }
+    }
+    async updateCheckOutTime(arg0: string, arg1: bigint, arg2: string, arg3: bigint, arg4: bigint): Promise<void> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.updateCheckOutTime(arg0, arg1, arg2, arg3, arg4);
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.updateCheckOutTime(arg0, arg1, arg2, arg3, arg4);
             return result;
         }
     }

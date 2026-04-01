@@ -22,7 +22,7 @@ import type {
 import { useActor } from "../../hooks/useActor";
 
 function formatNanoTimestamp(ns: bigint | undefined | null): string {
-  if (ns == null) return "—";
+  if (ns == null) return "\u2014";
   const ms = Number(ns / 1_000_000n);
   return new Date(ms).toLocaleTimeString(undefined, {
     hour: "2-digit",
@@ -45,7 +45,6 @@ function formatMinutes(mins: number): string {
   return `${m}m`;
 }
 
-/** Compute late info from raw check-in timestamp vs shift start */
 function computeLateInfo(
   checkInTime: bigint,
   shiftStart: string,
@@ -59,7 +58,6 @@ function computeLateInfo(
   return { isLate: diff > 5, lateMinutes: diff > 5 ? diff : 0 };
 }
 
-/** Compute overtime / early-exit info from raw check-out timestamp vs shift end */
 function computeOvertimeInfo(
   checkOutTime: bigint,
   shiftEnd: string,
@@ -73,27 +71,10 @@ function computeOvertimeInfo(
   return { isEarlyExit: diff < -5, overtimeMinutes: diff > 5 ? diff : 0 };
 }
 
-/**
- * Call updateCheckInTime via the inner raw ICP actor.
- * The generated Backend wrapper does not expose this method,
- * but the underlying ActorSubclass (stored as actor.actor) does.
- */
-async function callUpdateCheckInTime(
-  actor: any,
-  adminPassword: string,
-  staffId: bigint,
-  date: string,
-  hour: bigint,
-  minute: bigint,
-): Promise<void> {
-  if (typeof actor.updateCheckInTime === "function") {
-    return actor.updateCheckInTime(adminPassword, staffId, date, hour, minute);
-  }
-  const rawActor = actor.actor ?? actor._actor ?? actor;
-  if (typeof rawActor.updateCheckInTime !== "function") {
-    throw new Error("updateCheckInTime is not available on the backend actor");
-  }
-  return rawActor.updateCheckInTime(adminPassword, staffId, date, hour, minute);
+function timeStringFromNano(ns: bigint): string {
+  const ms = Number(ns / 1_000_000n);
+  const d = new Date(ms);
+  return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
 }
 
 function StaffStatusCard({
@@ -109,10 +90,13 @@ function StaffStatusCard({
 }) {
   const { actor } = useActor();
   const queryClient = useQueryClient();
-  const [editMode, setEditMode] = useState(false);
-  const [editTime, setEditTime] = useState("");
 
-  // Robust null-safe state checks
+  const [editCheckInMode, setEditCheckInMode] = useState(false);
+  const [editCheckInTime, setEditCheckInTime] = useState("");
+
+  const [editCheckOutMode, setEditCheckOutMode] = useState(false);
+  const [editCheckOutTime, setEditCheckOutTime] = useState("");
+
   const isCheckedIn =
     !!attendance &&
     attendance.checkInTime != null &&
@@ -124,7 +108,6 @@ function StaffStatusCard({
   const notIn = !attendance || attendance.checkInTime == null;
   const hasCheckIn = isCheckedIn || isCheckedOut;
 
-  // Frontend-computed flags (reliable)
   const lateInfo =
     attendance?.checkInTime != null
       ? computeLateInfo(attendance.checkInTime, staff.shiftStart)
@@ -134,53 +117,161 @@ function StaffStatusCard({
       ? computeOvertimeInfo(attendance.checkOutTime, staff.shiftEnd)
       : null;
 
-  const editMutation = useMutation({
+  const editCheckInMutation = useMutation({
     mutationFn: async (timeStr: string) => {
       if (!actor || !attendance) throw new Error("Not ready");
       const [hStr, mStr] = timeStr.split(":");
       const h = Number.parseInt(hStr ?? "0", 10);
       const m = Number.parseInt(mStr ?? "0", 10);
-      await callUpdateCheckInTime(
-        actor,
+      // Convert local time to UTC before sending to backend
+      const localDate = new Date();
+      localDate.setHours(h, m, 0, 0);
+      const utcH = localDate.getUTCHours();
+      const utcM = localDate.getUTCMinutes();
+      await actor.updateCheckInTime(
         "Fancy0308",
         staff.id,
         attendance.date,
-        BigInt(h),
-        BigInt(m),
+        BigInt(utcH),
+        BigInt(utcM),
       );
     },
     onSuccess: () => {
       toast.success("Check-in time updated!");
       queryClient.invalidateQueries({ queryKey: ["todayAttendance"] });
-      setEditMode(false);
-      setEditTime("");
+      setEditCheckInMode(false);
+      setEditCheckInTime("");
     },
     onError: (err: unknown) => {
-      const msg = err instanceof Error ? err.message : "Update failed";
-      toast.error(msg);
+      toast.error(err instanceof Error ? err.message : "Update failed");
     },
   });
 
-  function handleEditOpen() {
-    // Pre-fill with current check-in time
+  const editCheckOutMutation = useMutation({
+    mutationFn: async (timeStr: string) => {
+      if (!actor || !attendance) throw new Error("Not ready");
+      const [hStr, mStr] = timeStr.split(":");
+      const h = Number.parseInt(hStr ?? "0", 10);
+      const m = Number.parseInt(mStr ?? "0", 10);
+      // Convert local time to UTC before sending to backend
+      const localDate = new Date();
+      localDate.setHours(h, m, 0, 0);
+      const utcH = localDate.getUTCHours();
+      const utcM = localDate.getUTCMinutes();
+      await actor.updateCheckOutTime(
+        "Fancy0308",
+        staff.id,
+        attendance.date,
+        BigInt(utcH),
+        BigInt(utcM),
+      );
+    },
+    onSuccess: () => {
+      toast.success("Check-out time updated!");
+      queryClient.invalidateQueries({ queryKey: ["todayAttendance"] });
+      setEditCheckOutMode(false);
+      setEditCheckOutTime("");
+    },
+    onError: (err: unknown) => {
+      toast.error(err instanceof Error ? err.message : "Update failed");
+    },
+  });
+
+  function openCheckInEdit() {
     if (attendance?.checkInTime != null) {
-      const ms = Number(attendance.checkInTime / 1_000_000n);
-      const d = new Date(ms);
-      const hh = String(d.getHours()).padStart(2, "0");
-      const mm = String(d.getMinutes()).padStart(2, "0");
-      setEditTime(`${hh}:${mm}`);
+      setEditCheckInTime(timeStringFromNano(attendance.checkInTime));
     }
-    setEditMode(true);
+    setEditCheckInMode(true);
+    setEditCheckOutMode(false);
   }
 
-  function handleEditCancel() {
-    setEditMode(false);
-    setEditTime("");
+  function openCheckOutEdit() {
+    if (attendance?.checkOutTime != null) {
+      setEditCheckOutTime(timeStringFromNano(attendance.checkOutTime));
+    }
+    setEditCheckOutMode(true);
+    setEditCheckInMode(false);
   }
 
-  function handleEditConfirm() {
-    if (!editTime) return;
-    editMutation.mutate(editTime);
+  const editPanelStyle = {
+    background: "oklch(0.14 0.008 60)",
+    border: "1px solid oklch(0.76 0.15 85 / 0.3)",
+  };
+
+  function EditPanel({
+    label,
+    value,
+    onChange,
+    onConfirm,
+    onCancel,
+    isPending,
+    ocidPrefix,
+  }: {
+    label: string;
+    value: string;
+    onChange: (v: string) => void;
+    onConfirm: () => void;
+    onCancel: () => void;
+    isPending: boolean;
+    ocidPrefix: string;
+  }) {
+    return (
+      <motion.div
+        initial={{ opacity: 0, y: -4 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="rounded-lg p-2.5 space-y-2"
+        style={editPanelStyle}
+      >
+        <div className="flex items-center gap-1.5">
+          <Clock className="w-3 h-3 text-gold flex-shrink-0" />
+          <span className="text-[10px] font-medium text-gold uppercase tracking-wide">
+            {label}
+          </span>
+        </div>
+        <input
+          type="time"
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          data-ocid={`${ocidPrefix}_time_input.${index + 1}`}
+          className="w-full rounded-md px-2.5 py-1.5 text-sm text-foreground bg-transparent outline-none"
+          style={{
+            background: "oklch(0.10 0.006 60)",
+            border: "1px solid oklch(0.76 0.15 85 / 0.35)",
+            colorScheme: "dark",
+          }}
+        />
+        <div className="flex gap-1.5">
+          <button
+            type="button"
+            data-ocid={`${ocidPrefix}_confirm_button.${index + 1}`}
+            onClick={onConfirm}
+            disabled={!value || isPending}
+            className="flex-1 flex items-center justify-center gap-1 text-xs font-medium py-1.5 rounded-md transition-colors disabled:opacity-50"
+            style={{
+              background: "oklch(0.76 0.15 85)",
+              color: "oklch(0.08 0.006 60)",
+            }}
+          >
+            <Check className="w-3 h-3" />
+            {isPending ? "Saving\u2026" : "Save"}
+          </button>
+          <button
+            type="button"
+            data-ocid={`${ocidPrefix}_cancel_button.${index + 1}`}
+            onClick={onCancel}
+            disabled={isPending}
+            className="flex-1 flex items-center justify-center gap-1 text-xs font-medium py-1.5 rounded-md transition-colors disabled:opacity-50 text-muted-foreground hover:text-foreground"
+            style={{
+              background: "oklch(0.18 0.008 60)",
+              border: "1px solid oklch(0.28 0.008 60)",
+            }}
+          >
+            <X className="w-3 h-3" />
+            Cancel
+          </button>
+        </div>
+      </motion.div>
+    );
   }
 
   return (
@@ -191,7 +282,7 @@ function StaffStatusCard({
       transition={{ delay: index * 0.05, duration: 0.4 }}
       className="rounded-xl p-4 luxury-card space-y-3"
     >
-      {/* Top: photo + name */}
+      {/* Photo + name */}
       <div className="flex items-center gap-3">
         <div className="relative flex-shrink-0">
           <div
@@ -222,7 +313,7 @@ function StaffStatusCard({
               className="absolute -bottom-0.5 -right-0.5 w-4 h-4 rounded-full flex items-center justify-center"
               style={{ background: "oklch(0.76 0.15 85)" }}
             >
-              <Crown className="w-2 h-2 text-background" />
+              <Crown className="w-2 w-2 text-background" />
             </div>
           )}
         </div>
@@ -231,7 +322,7 @@ function StaffStatusCard({
             {staff.name}
           </p>
           <p className="text-xs text-muted-foreground">
-            {staff.shiftStart} – {staff.shiftEnd}
+            {staff.shiftStart} \u2013 {staff.shiftEnd}
           </p>
         </div>
       </div>
@@ -249,13 +340,12 @@ function StaffStatusCard({
               }}
             >
               <span className="w-1.5 h-1.5 rounded-full bg-[oklch(0.68_0.18_148)] animate-pulse" />
-              Checked In · {formatNanoTimestamp(attendance?.checkInTime)}
+              Checked In \u00b7 {formatNanoTimestamp(attendance?.checkInTime)}
             </span>
             {hasCheckIn && (
               <button
                 type="button"
-                data-ocid={`live_status.edit_checkin_button.${index + 1}`}
-                onClick={handleEditOpen}
+                onClick={openCheckInEdit}
                 className="p-1 rounded-md transition-colors hover:bg-[oklch(0.76_0.15_85_/_0.15)] text-muted-foreground hover:text-gold"
                 title="Edit check-in time"
               >
@@ -264,36 +354,48 @@ function StaffStatusCard({
             )}
           </div>
         )}
+
         {isCheckedOut && (
-          <div className="space-y-0.5">
-            <span
-              className="inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded-full"
-              style={{
-                background: "oklch(0.50 0.006 60 / 0.3)",
-                color: "oklch(0.65 0.006 60)",
-                border: "1px solid oklch(0.40 0.006 60)",
-              }}
-            >
-              Checked Out · {formatNanoTimestamp(attendance?.checkOutTime)}
-            </span>
-            <div className="flex items-center gap-1.5 pl-1">
-              <p className="text-xs text-muted-foreground">
+          <div className="space-y-1">
+            {/* Check-in row */}
+            <div className="flex items-center gap-1.5 flex-wrap">
+              <span className="text-xs text-muted-foreground">
                 In: {formatNanoTimestamp(attendance?.checkInTime)}
-              </p>
-              {hasCheckIn && (
-                <button
-                  type="button"
-                  data-ocid={`live_status.edit_checkin_button.${index + 1}`}
-                  onClick={handleEditOpen}
-                  className="p-0.5 rounded transition-colors hover:bg-[oklch(0.76_0.15_85_/_0.15)] text-muted-foreground hover:text-gold"
-                  title="Edit check-in time"
-                >
-                  <Pencil className="w-3 h-3" />
-                </button>
-              )}
+              </span>
+              <button
+                type="button"
+                onClick={openCheckInEdit}
+                className="p-0.5 rounded transition-colors hover:bg-[oklch(0.76_0.15_85_/_0.15)] text-muted-foreground hover:text-gold"
+                title="Edit check-in time"
+              >
+                <Pencil className="w-3 h-3" />
+              </button>
+            </div>
+            {/* Check-out row */}
+            <div className="flex items-center gap-1.5 flex-wrap">
+              <span
+                className="inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded-full"
+                style={{
+                  background: "oklch(0.50 0.006 60 / 0.3)",
+                  color: "oklch(0.65 0.006 60)",
+                  border: "1px solid oklch(0.40 0.006 60)",
+                }}
+              >
+                Checked Out \u00b7{" "}
+                {formatNanoTimestamp(attendance?.checkOutTime)}
+              </span>
+              <button
+                type="button"
+                onClick={openCheckOutEdit}
+                className="p-0.5 rounded transition-colors hover:bg-[oklch(0.76_0.15_85_/_0.15)] text-muted-foreground hover:text-gold"
+                title="Edit check-out time"
+              >
+                <Pencil className="w-3 h-3" />
+              </button>
             </div>
           </div>
         )}
+
         {notIn && (
           <span
             className="inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded-full"
@@ -307,66 +409,36 @@ function StaffStatusCard({
           </span>
         )}
 
-        {/* Inline edit form */}
-        {editMode && (
-          <motion.div
-            initial={{ opacity: 0, y: -4 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="rounded-lg p-2.5 space-y-2"
-            style={{
-              background: "oklch(0.14 0.008 60)",
-              border: "1px solid oklch(0.76 0.15 85 / 0.3)",
+        {/* Check-in edit panel */}
+        {editCheckInMode && (
+          <EditPanel
+            label="Edit Check-in Time"
+            value={editCheckInTime}
+            onChange={setEditCheckInTime}
+            onConfirm={() => editCheckInMutation.mutate(editCheckInTime)}
+            onCancel={() => {
+              setEditCheckInMode(false);
+              setEditCheckInTime("");
             }}
-          >
-            <div className="flex items-center gap-1.5">
-              <Clock className="w-3 h-3 text-gold flex-shrink-0" />
-              <span className="text-[10px] font-medium text-gold uppercase tracking-wide">
-                Edit Check-in Time
-              </span>
-            </div>
-            <input
-              type="time"
-              value={editTime}
-              onChange={(e) => setEditTime(e.target.value)}
-              data-ocid={`live_status.checkin_time_input.${index + 1}`}
-              className="w-full rounded-md px-2.5 py-1.5 text-sm text-foreground bg-transparent outline-none"
-              style={{
-                background: "oklch(0.10 0.006 60)",
-                border: "1px solid oklch(0.76 0.15 85 / 0.35)",
-                colorScheme: "dark",
-              }}
-            />
-            <div className="flex gap-1.5">
-              <button
-                type="button"
-                data-ocid={`live_status.checkin_confirm_button.${index + 1}`}
-                onClick={handleEditConfirm}
-                disabled={!editTime || editMutation.isPending}
-                className="flex-1 flex items-center justify-center gap-1 text-xs font-medium py-1.5 rounded-md transition-colors disabled:opacity-50"
-                style={{
-                  background: "oklch(0.76 0.15 85)",
-                  color: "oklch(0.08 0.006 60)",
-                }}
-              >
-                <Check className="w-3 h-3" />
-                {editMutation.isPending ? "Saving…" : "Save"}
-              </button>
-              <button
-                type="button"
-                data-ocid={`live_status.checkin_cancel_button.${index + 1}`}
-                onClick={handleEditCancel}
-                disabled={editMutation.isPending}
-                className="flex-1 flex items-center justify-center gap-1 text-xs font-medium py-1.5 rounded-md transition-colors disabled:opacity-50 text-muted-foreground hover:text-foreground"
-                style={{
-                  background: "oklch(0.18 0.008 60)",
-                  border: "1px solid oklch(0.28 0.008 60)",
-                }}
-              >
-                <X className="w-3 h-3" />
-                Cancel
-              </button>
-            </div>
-          </motion.div>
+            isPending={editCheckInMutation.isPending}
+            ocidPrefix="live_status.checkin"
+          />
+        )}
+
+        {/* Check-out edit panel */}
+        {editCheckOutMode && (
+          <EditPanel
+            label="Edit Check-out Time"
+            value={editCheckOutTime}
+            onChange={setEditCheckOutTime}
+            onConfirm={() => editCheckOutMutation.mutate(editCheckOutTime)}
+            onCancel={() => {
+              setEditCheckOutMode(false);
+              setEditCheckOutTime("");
+            }}
+            isPending={editCheckOutMutation.isPending}
+            ocidPrefix="live_status.checkout"
+          />
         )}
       </div>
 
@@ -383,12 +455,12 @@ function StaffStatusCard({
             Today's earnings:{" "}
           </span>
           <span className="text-gold font-semibold">
-            ₹{Number(earnings.total).toLocaleString()}
+            \u20b9{Number(earnings.total).toLocaleString()}
           </span>
         </div>
       )}
 
-      {/* Flags — frontend-computed */}
+      {/* Flags */}
       {!staff.isPremium && attendance && attendance.checkInTime != null && (
         <div className="flex flex-wrap gap-1">
           {lateInfo?.isLate && (
@@ -503,7 +575,6 @@ export default function LiveStatusTab() {
 
   return (
     <div className="space-y-5">
-      {/* Summary stats */}
       <div className="grid grid-cols-3 gap-3">
         {[
           { label: "Total Active Staff", value: activeStaff.length },
@@ -530,14 +601,13 @@ export default function LiveStatusTab() {
               className="font-display text-2xl font-bold"
               style={{ color: stat.gold ? "oklch(0.76 0.15 85)" : undefined }}
             >
-              {isLoading ? "—" : stat.value}
+              {isLoading ? "\u2014" : stat.value}
             </p>
             <p className="text-xs text-muted-foreground mt-0.5">{stat.label}</p>
           </div>
         ))}
       </div>
 
-      {/* Refresh button */}
       <div className="flex justify-end">
         <button
           type="button"
@@ -549,7 +619,6 @@ export default function LiveStatusTab() {
         </button>
       </div>
 
-      {/* Loading */}
       {isLoading && (
         <div
           data-ocid="live_status.loading_state"
@@ -559,7 +628,6 @@ export default function LiveStatusTab() {
         </div>
       )}
 
-      {/* Staff grid */}
       {!isLoading && activeStaff.length === 0 && (
         <div
           data-ocid="live_status.empty_state"
@@ -569,6 +637,7 @@ export default function LiveStatusTab() {
           <p>No active staff found.</p>
         </div>
       )}
+
       {!isLoading && activeStaff.length > 0 && (
         <motion.div
           data-ocid="live_status.staff_list"

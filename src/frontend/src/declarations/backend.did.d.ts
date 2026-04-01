@@ -89,7 +89,14 @@ export interface _SERVICE {
   'removeHalfDay' : ActorMethod<[string, bigint, string], undefined>,
   'removeStaff' : ActorMethod<[string, bigint], undefined>,
   'saveCallerUserProfile' : ActorMethod<[UserProfile], undefined>,
-  'updateCheckInTime' : ActorMethod<[string, bigint, string, bigint, bigint], undefined>,
+  'updateCheckInTime' : ActorMethod<
+    [string, bigint, string, bigint, bigint],
+    undefined
+  >,
+  'updateCheckOutTime' : ActorMethod<
+    [string, bigint, string, bigint, bigint],
+    undefined
+  >,
   'updateStaff' : ActorMethod<
     [string, bigint, string, string, string, string, boolean, boolean],
     undefined
