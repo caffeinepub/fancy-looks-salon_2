@@ -84,6 +84,7 @@ export interface backendInterface {
     removeHalfDay(adminPassword: string, staffId: bigint, date: string): Promise<void>;
     removeStaff(adminPassword: string, id: bigint): Promise<void>;
     saveCallerUserProfile(profile: UserProfile): Promise<void>;
+    updateCheckInTime(adminPassword: string, staffId: bigint, date: string, newCheckInHour: bigint, newCheckInMinute: bigint): Promise<void>;
     updateStaff(adminPassword: string, id: bigint, name: string, photoUrl: string, shiftStart: string, shiftEnd: string, isPremium: boolean, isActive: boolean): Promise<void>;
     verifyAdminPassword(password: string): Promise<boolean>;
 }

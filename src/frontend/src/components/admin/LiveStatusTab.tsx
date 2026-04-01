@@ -73,6 +73,29 @@ function computeOvertimeInfo(
   return { isEarlyExit: diff < -5, overtimeMinutes: diff > 5 ? diff : 0 };
 }
 
+/**
+ * Call updateCheckInTime via the inner raw ICP actor.
+ * The generated Backend wrapper does not expose this method,
+ * but the underlying ActorSubclass (stored as actor.actor) does.
+ */
+async function callUpdateCheckInTime(
+  actor: any,
+  adminPassword: string,
+  staffId: bigint,
+  date: string,
+  hour: bigint,
+  minute: bigint,
+): Promise<void> {
+  if (typeof actor.updateCheckInTime === "function") {
+    return actor.updateCheckInTime(adminPassword, staffId, date, hour, minute);
+  }
+  const rawActor = actor.actor ?? actor._actor ?? actor;
+  if (typeof rawActor.updateCheckInTime !== "function") {
+    throw new Error("updateCheckInTime is not available on the backend actor");
+  }
+  return rawActor.updateCheckInTime(adminPassword, staffId, date, hour, minute);
+}
+
 function StaffStatusCard({
   staff,
   attendance,
@@ -117,7 +140,8 @@ function StaffStatusCard({
       const [hStr, mStr] = timeStr.split(":");
       const h = Number.parseInt(hStr ?? "0", 10);
       const m = Number.parseInt(mStr ?? "0", 10);
-      await (actor as any).updateCheckInTime(
+      await callUpdateCheckInTime(
+        actor,
         "Fancy0308",
         staff.id,
         attendance.date,
