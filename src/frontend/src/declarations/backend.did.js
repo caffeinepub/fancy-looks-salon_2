@@ -112,7 +112,8 @@ export const idlService = IDL.Service({
   'removeHalfDay' : IDL.Func([IDL.Text, IDL.Nat, IDL.Text], [], []),
   'removeStaff' : IDL.Func([IDL.Text, IDL.Nat], [], []),
   'saveCallerUserProfile' : IDL.Func([UserProfile], [], []),
-  'updateStaff' : IDL.Func(
+  'updateCheckInTime' : IDL.Func([IDL.Text, IDL.Nat, IDL.Text, IDL.Nat, IDL.Nat], [], []),
+    'updateStaff' : IDL.Func(
       [
         IDL.Text,
         IDL.Nat,
@@ -236,6 +237,7 @@ export const idlFactory = ({ IDL }) => {
     'removeHalfDay' : IDL.Func([IDL.Text, IDL.Nat, IDL.Text], [], []),
     'removeStaff' : IDL.Func([IDL.Text, IDL.Nat], [], []),
     'saveCallerUserProfile' : IDL.Func([UserProfile], [], []),
+    'updateCheckInTime' : IDL.Func([IDL.Text, IDL.Nat, IDL.Text, IDL.Nat, IDL.Nat], [], []),
     'updateStaff' : IDL.Func(
         [
           IDL.Text,

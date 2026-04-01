@@ -326,6 +326,36 @@ actor {
     timestamp;
   };
 
+  public shared func updateCheckInTime(adminPassword : Text, staffId : Nat, date : Text, newCheckInHour : Nat, newCheckInMinute : Nat) : async () {
+    verifyAdminPasswordOrTrap(adminPassword);
+    let staffProfile = switch (staffProfiles.get(staffId)) {
+      case (null) { Runtime.trap("Staff not found") };
+      case (?profile) { profile };
+    };
+    var foundId : ?Nat = null;
+    for ((id, record) in attendanceRecords.entries()) {
+      if (record.staffId == staffId and record.date == date) {
+        foundId := ?id;
+      };
+    };
+    let attendanceId = switch (foundId) {
+      case (null) { Runtime.trap("Attendance record not found for this date") };
+      case (?id) { id };
+    };
+    let existing = switch (attendanceRecords.get(attendanceId)) {
+      case (null) { Runtime.trap("Attendance record not found") };
+      case (?r) { r };
+    };
+    let dayStartNs : Int = (Time.now() / (24 * 60 * 60 * 1_000_000_000)) * (24 * 60 * 60 * 1_000_000_000);
+    let newCheckInTime : Int = dayStartNs + (newCheckInHour * 60 + newCheckInMinute) * 60 * 1_000_000_000;
+    let updated : AttendanceRecord = {
+      existing with
+      checkInTime = ?newCheckInTime;
+      isLate = isLate(newCheckInTime, staffProfile.shiftStart);
+    };
+    attendanceRecords.add(attendanceId, updated);
+  };
+
   public query func getTodayAttendance() : async [AttendanceRecord] {
     let today = (Time.now() / (24 * 60 * 60 * 1_000_000_000)).toText();
     attendanceRecords.values().toArray().filter(func(record) { record.date == today });

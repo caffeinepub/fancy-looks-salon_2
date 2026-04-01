@@ -1,14 +1,19 @@
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   AlertTriangle,
+  Check,
   Clock,
   Crown,
   LogOut,
+  Pencil,
   RefreshCw,
   TrendingUp,
   UserCircle2,
+  X,
 } from "lucide-react";
 import { motion } from "motion/react";
+import { useState } from "react";
+import { toast } from "sonner";
 import type {
   AttendanceRecord,
   EarningsEntry,
@@ -79,6 +84,11 @@ function StaffStatusCard({
   earnings: EarningsEntry | undefined;
   index: number;
 }) {
+  const { actor } = useActor();
+  const queryClient = useQueryClient();
+  const [editMode, setEditMode] = useState(false);
+  const [editTime, setEditTime] = useState("");
+
   // Robust null-safe state checks
   const isCheckedIn =
     !!attendance &&
@@ -89,6 +99,7 @@ function StaffStatusCard({
     attendance.checkInTime != null &&
     attendance.checkOutTime != null;
   const notIn = !attendance || attendance.checkInTime == null;
+  const hasCheckIn = isCheckedIn || isCheckedOut;
 
   // Frontend-computed flags (reliable)
   const lateInfo =
@@ -99,6 +110,54 @@ function StaffStatusCard({
     attendance?.checkOutTime != null
       ? computeOvertimeInfo(attendance.checkOutTime, staff.shiftEnd)
       : null;
+
+  const editMutation = useMutation({
+    mutationFn: async (timeStr: string) => {
+      if (!actor || !attendance) throw new Error("Not ready");
+      const [hStr, mStr] = timeStr.split(":");
+      const h = Number.parseInt(hStr ?? "0", 10);
+      const m = Number.parseInt(mStr ?? "0", 10);
+      await (actor as any).updateCheckInTime(
+        "Fancy0308",
+        staff.id,
+        attendance.date,
+        BigInt(h),
+        BigInt(m),
+      );
+    },
+    onSuccess: () => {
+      toast.success("Check-in time updated!");
+      queryClient.invalidateQueries({ queryKey: ["todayAttendance"] });
+      setEditMode(false);
+      setEditTime("");
+    },
+    onError: (err: unknown) => {
+      const msg = err instanceof Error ? err.message : "Update failed";
+      toast.error(msg);
+    },
+  });
+
+  function handleEditOpen() {
+    // Pre-fill with current check-in time
+    if (attendance?.checkInTime != null) {
+      const ms = Number(attendance.checkInTime / 1_000_000n);
+      const d = new Date(ms);
+      const hh = String(d.getHours()).padStart(2, "0");
+      const mm = String(d.getMinutes()).padStart(2, "0");
+      setEditTime(`${hh}:${mm}`);
+    }
+    setEditMode(true);
+  }
+
+  function handleEditCancel() {
+    setEditMode(false);
+    setEditTime("");
+  }
+
+  function handleEditConfirm() {
+    if (!editTime) return;
+    editMutation.mutate(editTime);
+  }
 
   return (
     <motion.div
@@ -154,19 +213,32 @@ function StaffStatusCard({
       </div>
 
       {/* Status */}
-      <div>
+      <div className="space-y-1.5">
         {isCheckedIn && (
-          <span
-            className="inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded-full"
-            style={{
-              background: "oklch(0.68 0.18 148 / 0.15)",
-              color: "oklch(0.68 0.18 148)",
-              border: "1px solid oklch(0.68 0.18 148 / 0.3)",
-            }}
-          >
-            <span className="w-1.5 h-1.5 rounded-full bg-[oklch(0.68_0.18_148)] animate-pulse" />
-            Checked In · {formatNanoTimestamp(attendance?.checkInTime)}
-          </span>
+          <div className="flex items-center gap-1.5 flex-wrap">
+            <span
+              className="inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded-full"
+              style={{
+                background: "oklch(0.68 0.18 148 / 0.15)",
+                color: "oklch(0.68 0.18 148)",
+                border: "1px solid oklch(0.68 0.18 148 / 0.3)",
+              }}
+            >
+              <span className="w-1.5 h-1.5 rounded-full bg-[oklch(0.68_0.18_148)] animate-pulse" />
+              Checked In · {formatNanoTimestamp(attendance?.checkInTime)}
+            </span>
+            {hasCheckIn && (
+              <button
+                type="button"
+                data-ocid={`live_status.edit_checkin_button.${index + 1}`}
+                onClick={handleEditOpen}
+                className="p-1 rounded-md transition-colors hover:bg-[oklch(0.76_0.15_85_/_0.15)] text-muted-foreground hover:text-gold"
+                title="Edit check-in time"
+              >
+                <Pencil className="w-3 h-3" />
+              </button>
+            )}
+          </div>
         )}
         {isCheckedOut && (
           <div className="space-y-0.5">
@@ -180,9 +252,22 @@ function StaffStatusCard({
             >
               Checked Out · {formatNanoTimestamp(attendance?.checkOutTime)}
             </span>
-            <p className="text-xs text-muted-foreground pl-1">
-              In: {formatNanoTimestamp(attendance?.checkInTime)}
-            </p>
+            <div className="flex items-center gap-1.5 pl-1">
+              <p className="text-xs text-muted-foreground">
+                In: {formatNanoTimestamp(attendance?.checkInTime)}
+              </p>
+              {hasCheckIn && (
+                <button
+                  type="button"
+                  data-ocid={`live_status.edit_checkin_button.${index + 1}`}
+                  onClick={handleEditOpen}
+                  className="p-0.5 rounded transition-colors hover:bg-[oklch(0.76_0.15_85_/_0.15)] text-muted-foreground hover:text-gold"
+                  title="Edit check-in time"
+                >
+                  <Pencil className="w-3 h-3" />
+                </button>
+              )}
+            </div>
           </div>
         )}
         {notIn && (
@@ -196,6 +281,68 @@ function StaffStatusCard({
           >
             Absent
           </span>
+        )}
+
+        {/* Inline edit form */}
+        {editMode && (
+          <motion.div
+            initial={{ opacity: 0, y: -4 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="rounded-lg p-2.5 space-y-2"
+            style={{
+              background: "oklch(0.14 0.008 60)",
+              border: "1px solid oklch(0.76 0.15 85 / 0.3)",
+            }}
+          >
+            <div className="flex items-center gap-1.5">
+              <Clock className="w-3 h-3 text-gold flex-shrink-0" />
+              <span className="text-[10px] font-medium text-gold uppercase tracking-wide">
+                Edit Check-in Time
+              </span>
+            </div>
+            <input
+              type="time"
+              value={editTime}
+              onChange={(e) => setEditTime(e.target.value)}
+              data-ocid={`live_status.checkin_time_input.${index + 1}`}
+              className="w-full rounded-md px-2.5 py-1.5 text-sm text-foreground bg-transparent outline-none"
+              style={{
+                background: "oklch(0.10 0.006 60)",
+                border: "1px solid oklch(0.76 0.15 85 / 0.35)",
+                colorScheme: "dark",
+              }}
+            />
+            <div className="flex gap-1.5">
+              <button
+                type="button"
+                data-ocid={`live_status.checkin_confirm_button.${index + 1}`}
+                onClick={handleEditConfirm}
+                disabled={!editTime || editMutation.isPending}
+                className="flex-1 flex items-center justify-center gap-1 text-xs font-medium py-1.5 rounded-md transition-colors disabled:opacity-50"
+                style={{
+                  background: "oklch(0.76 0.15 85)",
+                  color: "oklch(0.08 0.006 60)",
+                }}
+              >
+                <Check className="w-3 h-3" />
+                {editMutation.isPending ? "Saving…" : "Save"}
+              </button>
+              <button
+                type="button"
+                data-ocid={`live_status.checkin_cancel_button.${index + 1}`}
+                onClick={handleEditCancel}
+                disabled={editMutation.isPending}
+                className="flex-1 flex items-center justify-center gap-1 text-xs font-medium py-1.5 rounded-md transition-colors disabled:opacity-50 text-muted-foreground hover:text-foreground"
+                style={{
+                  background: "oklch(0.18 0.008 60)",
+                  border: "1px solid oklch(0.28 0.008 60)",
+                }}
+              >
+                <X className="w-3 h-3" />
+                Cancel
+              </button>
+            </div>
+          </motion.div>
         )}
       </div>
 
