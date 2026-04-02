@@ -553,6 +553,62 @@ export class Backend implements backendInterface {
             return result;
         }
     }
+    async setStaffPassword(arg0: string, arg1: bigint, arg2: string): Promise<void> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.setStaffPassword(arg0, arg1, arg2);
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.setStaffPassword(arg0, arg1, arg2);
+            return result;
+        }
+    }
+    async verifyStaffPassword(arg0: bigint, arg1: string): Promise<boolean> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.verifyStaffPassword(arg0, arg1);
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.verifyStaffPassword(arg0, arg1);
+            return result;
+        }
+    }
+    async hasStaffPassword(arg0: bigint): Promise<boolean> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.hasStaffPassword(arg0);
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.hasStaffPassword(arg0);
+            return result;
+        }
+    }
+    async findStaffByPassword(arg0: string): Promise<[] | [bigint]> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.findStaffByPassword(arg0);
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.findStaffByPassword(arg0);
+            return result;
+        }
+    }
 }
 function from_candid_AttendanceRecord_n4(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: _AttendanceRecord): AttendanceRecord {
     return from_candid_record_n5(_uploadFile, _downloadFile, value);
