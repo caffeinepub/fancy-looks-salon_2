@@ -1,22 +1,22 @@
 import { Toaster } from "@/components/ui/sonner";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import type { StaffProfile } from "./backend.d";
 import AdminDashboard from "./components/AdminDashboard";
 import AdminLoginPage from "./components/AdminLoginPage";
 import HomePage from "./components/HomePage";
 import StaffLoginPage from "./components/StaffLoginPage";
+import StaffPasswordLoginPage from "./components/StaffPasswordLoginPage";
 import StaffPortalPage from "./components/StaffPortalPage";
 import StaffSelectionPage from "./components/StaffSelectionPage";
 
 export type AppView =
   | "home"
+  | "staff-password-login"
   | "staff-selection"
   | "staff-login"
   | "staff-portal"
   | "admin-login"
   | "admin-dashboard";
-
-const REMEMBER_KEY = "fls_remembered_staff";
 
 function App() {
   const [view, setView] = useState<AppView>("home");
@@ -25,17 +25,16 @@ function App() {
 
   const navigateTo = (target: AppView) => setView(target);
 
-  // Staff selects their profile card -> go to staff login page
+  // Staff enters their password on the unified login page → profile auto-opens
+  const handleStaffPasswordLoginSuccess = (staff: StaffProfile) => {
+    setSelectedStaff(staff);
+    setView("staff-portal");
+  };
+
+  // Legacy: staff selects their profile card -> go to staff login page
   const handleStaffSelect = (staff: StaffProfile) => {
     setSelectedStaff(staff);
-    // Check if this staff is remembered (already logged in)
-    const rememberedId = localStorage.getItem(REMEMBER_KEY);
-    if (rememberedId && rememberedId === String(staff.id)) {
-      // Skip login, go straight to portal
-      setView("staff-portal");
-    } else {
-      setView("staff-login");
-    }
+    setView("staff-login");
   };
 
   // Staff enters correct password -> go to portal
@@ -54,18 +53,22 @@ function App() {
     setView("home");
   };
 
-  // When leaving staff portal, clear remembered state is NOT done automatically
-  // (remembered stays until they explicitly uncheck or log out)
   const handleStaffPortalBack = () => {
-    setView("staff-selection");
+    setView("staff-password-login");
   };
 
   return (
     <div className="min-h-screen bg-background font-body">
       {view === "home" && (
         <HomePage
-          onStaffPortal={() => navigateTo("staff-selection")}
+          onStaffPortal={() => navigateTo("staff-password-login")}
           onAdminLogin={() => navigateTo("admin-login")}
+        />
+      )}
+      {view === "staff-password-login" && (
+        <StaffPasswordLoginPage
+          onBack={() => navigateTo("home")}
+          onSuccess={handleStaffPasswordLoginSuccess}
         />
       )}
       {view === "staff-selection" && (

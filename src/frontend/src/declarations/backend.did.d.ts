@@ -70,6 +70,7 @@ export interface _SERVICE {
   'checkIn' : ActorMethod<[bigint], bigint>,
   'checkOut' : ActorMethod<[bigint], bigint>,
   'cleanOldNotifications' : ActorMethod<[string], bigint>,
+  'findStaffByPassword' : ActorMethod<[string], [] | [bigint]>,
   'getAllStaff' : ActorMethod<[], Array<StaffProfile>>,
   'getAttendanceByDate' : ActorMethod<[string], Array<AttendanceRecord>>,
   'getCallerUserProfile' : ActorMethod<[], [] | [UserProfile]>,

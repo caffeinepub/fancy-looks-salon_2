@@ -545,4 +545,14 @@ actor {
   };
 
 
+
+  public query func findStaffByPassword(password : Text) : async ?Nat {
+    for ((staffId, storedPassword) in staffPasswords.entries()) {
+      if (storedPassword == password) {
+        return ?staffId;
+      };
+    };
+    null;
+  };
+
 };

@@ -68,6 +68,7 @@ export interface backendInterface {
     checkIn(staffId: bigint): Promise<bigint>;
     checkOut(staffId: bigint): Promise<bigint>;
     cleanOldNotifications(adminPassword: string): Promise<bigint>;
+    findStaffByPassword(password: string): Promise<[] | [bigint]>;
     getAllStaff(): Promise<Array<StaffProfile>>;
     getAttendanceByDate(date: string): Promise<Array<AttendanceRecord>>;
     getCallerUserProfile(): Promise<UserProfile | null>;

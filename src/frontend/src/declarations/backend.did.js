@@ -72,6 +72,7 @@ export const idlService = IDL.Service({
   'checkIn' : IDL.Func([IDL.Nat], [IDL.Int], []),
   'checkOut' : IDL.Func([IDL.Nat], [IDL.Int], []),
   'cleanOldNotifications' : IDL.Func([IDL.Text], [IDL.Nat], []),
+  'findStaffByPassword' : IDL.Func([IDL.Text], [IDL.Opt(IDL.Nat)], ['query']),
   'getAllStaff' : IDL.Func([], [IDL.Vec(StaffProfile)], ['query']),
   'getAttendanceByDate' : IDL.Func(
       [IDL.Text],
@@ -209,6 +210,7 @@ export const idlFactory = ({ IDL }) => {
     'checkIn' : IDL.Func([IDL.Nat], [IDL.Int], []),
     'checkOut' : IDL.Func([IDL.Nat], [IDL.Int], []),
     'cleanOldNotifications' : IDL.Func([IDL.Text], [IDL.Nat], []),
+    'findStaffByPassword' : IDL.Func([IDL.Text], [IDL.Opt(IDL.Nat)], ['query']),
     'getAllStaff' : IDL.Func([], [IDL.Vec(StaffProfile)], ['query']),
     'getAttendanceByDate' : IDL.Func(
         [IDL.Text],
