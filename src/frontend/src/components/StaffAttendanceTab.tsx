@@ -13,9 +13,15 @@ import { useState } from "react";
 import type { AttendanceRecord, StaffProfile } from "../backend.d";
 import { useActor } from "../hooks/useActor";
 
-// Convert backend epoch-days string to JS Date
+/**
+ * Convert backend epoch-days string to JS Date.
+ * Use UTC noon (12:00) to avoid timezone-shift bugs where midnight UTC
+ * becomes the previous day in timezones like IST (+5:30).
+ */
 function epochDaysToDate(dateStr: string): Date {
-  return new Date(Number(dateStr) * 24 * 60 * 60 * 1000);
+  const epochDays = Number(dateStr);
+  // UTC noon avoids any timezone from rolling back to previous date
+  return new Date(epochDays * 24 * 60 * 60 * 1000 + 12 * 60 * 60 * 1000);
 }
 
 // Get today's epoch days string
@@ -25,7 +31,7 @@ function getTodayEpochDays(): string {
 
 // Convert nanosecond bigint timestamp to formatted time string
 function formatNanoTime(ns: bigint | undefined | null): string {
-  if (ns == null) return "—";
+  if (ns == null) return "\u2014";
   return new Date(Number(ns) / 1_000_000).toLocaleTimeString("en-IN", {
     hour: "2-digit",
     minute: "2-digit",
@@ -39,6 +45,7 @@ function formatDayHeader(d: Date): string {
     weekday: "short",
     day: "numeric",
     month: "short",
+    year: "numeric",
   });
 }
 
@@ -102,7 +109,7 @@ function StatusBadge({
   );
 }
 
-// ─── Daily View ───────────────────────────────────────────────────────────────
+// ─── Daily View ────────────────────────────────────────────────────────────────────────────────
 function DailyView({
   staffList,
   todayRecords,
@@ -120,7 +127,19 @@ function DailyView({
   };
 
   const rows: StaffRow[] = active.map((s) => {
-    const r = todayRecords.find((a) => String(a.staffId) === String(s.id));
+    // A staff can have multiple records today (re-check-in) — use the latest open one
+    const allForStaff = todayRecords.filter(
+      (a) => String(a.staffId) === String(s.id),
+    );
+    const openRecord = allForStaff.find(
+      (r) => r.checkInTime != null && r.checkOutTime == null,
+    );
+    const latestCompleted = allForStaff
+      .filter((r) => r.checkInTime != null && r.checkOutTime != null)
+      .sort(
+        (a, b) => Number(b.checkOutTime ?? 0n) - Number(a.checkOutTime ?? 0n),
+      )[0];
+    const r = openRecord ?? latestCompleted ?? allForStaff[0];
     let status: "present" | "checked-out" | "absent" = "absent";
     if (r?.checkInTime != null && r.checkOutTime == null) status = "present";
     else if (r?.checkInTime != null && r.checkOutTime != null)
@@ -237,11 +256,11 @@ function DailyView({
                   {row.staff.name}
                 </p>
                 <p className="text-[11px] text-muted-foreground">
-                  {row.staff.shiftStart} – {row.staff.shiftEnd}
+                  {row.staff.shiftStart} \u2013 {row.staff.shiftEnd}
                 </p>
               </div>
 
-              {/* Times — always visible on all screen sizes */}
+              {/* Times */}
               <div className="flex flex-col items-end gap-1 text-[11px] text-muted-foreground min-w-[100px]">
                 <span className="flex items-center gap-1">
                   <Clock className="w-3 h-3 text-gold opacity-70" />
@@ -277,7 +296,7 @@ function DailyView({
   );
 }
 
-// ─── Monthly View ─────────────────────────────────────────────────────────────
+// ─── Monthly View ────────────────────────────────────────────────────────────────────────────────
 function MonthlyView({
   staffList,
   allRecords,
@@ -308,9 +327,10 @@ function MonthlyView({
   });
 
   // Filter records for the selected month
+  // Use epochDaysToDate (UTC noon) so the day comparison is correct
   const monthRecords = allRecords.filter((r) => {
     const d = epochDaysToDate(r.date);
-    return d.getFullYear() === year && d.getMonth() === month;
+    return d.getUTCFullYear() === year && d.getUTCMonth() === month;
   });
 
   // Group by date
@@ -486,7 +506,7 @@ function MonthlyView({
                           {name}
                         </span>
 
-                        {/* Times — always visible on all screen sizes */}
+                        {/* Times */}
                         <div className="flex items-center gap-3 text-[11px]">
                           <span className="flex items-center gap-1">
                             <span className="text-muted-foreground">In:</span>
@@ -523,7 +543,7 @@ function MonthlyView({
   );
 }
 
-// ─── Main Component ───────────────────────────────────────────────────────────
+// ─── Main Component ─────────────────────────────────────────────────────────────────────────────────
 export default function StaffAttendanceTab() {
   const { actor, isFetching } = useActor();
   const [view, setView] = useState<"daily" | "monthly">("daily");

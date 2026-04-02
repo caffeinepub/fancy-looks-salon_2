@@ -5,13 +5,13 @@ import Time "mo:core/Time";
 import Nat "mo:core/Nat";
 import Int "mo:core/Int";
 import Principal "mo:core/Principal";
-import Migration "migration";
+
 import Runtime "mo:core/Runtime";
 import MixinAuthorization "authorization/MixinAuthorization";
 import AccessControl "authorization/access-control";
 import Iter "mo:core/Iter";
 
-(with migration = Migration.run)
+
 actor {
   // Keep these stable variables for upgrade compatibility
   let accessControlState = AccessControl.initState();
@@ -345,10 +345,18 @@ actor {
       case (?profile) { profile };
     };
 
+    // Allow re-check-in: only block if there is an open (not checked out) record for today
+    let todayEpochDays = (timestamp / (24 * 60 * 60 * 1_000_000_000)).toText();
+    for ((_, record) in attendanceRecords.entries()) {
+      if (record.staffId == staffId and record.date == todayEpochDays and record.checkOutTime == null) {
+        Runtime.trap("Already checked in. Please check out first.");
+      };
+    };
+
     let attendance : AttendanceRecord = {
       id = nextAttendanceId;
       staffId;
-      date = (timestamp / (24 * 60 * 60 * 1_000_000_000)).toText();
+      date = todayEpochDays;
       checkInTime = ?timestamp;
       checkOutTime = null;
       isLate = isLate(timestamp, staffProfile.shiftStart);
@@ -427,6 +435,7 @@ actor {
     timestamp;
   };
 
+  // Fix: compute dayStartNs from the passed date string (epoch-days), not from Time.now()
   public shared ({ caller }) func updateCheckInTime(adminPassword : Text, staffId : Nat, date : Text, newCheckInHour : Nat, newCheckInMinute : Nat) : async () {
     if (not (AccessControl.hasPermission(accessControlState, caller, #admin))) {
       Runtime.trap("Unauthorized: Only admins can update check-in times");
@@ -451,8 +460,13 @@ actor {
       case (null) { Runtime.trap("Attendance record not found") };
       case (?r) { r };
     };
-    let dayStartNs : Int = (Time.now() / (24 * 60 * 60 * 1_000_000_000)) * (24 * 60 * 60 * 1_000_000_000);
-    let newCheckInTime : Int = dayStartNs + (newCheckInHour * 60 + newCheckInMinute) * 60 * 1_000_000_000;
+    // Use the passed date (epoch-days) to compute the correct day start in nanoseconds
+    let epochDays = switch (Nat.fromText(date)) {
+      case (null) { Runtime.trap("Invalid date format") };
+      case (?d) { d };
+    };
+    let dayStartNs : Int = (epochDays * 24 * 60 * 60 * 1_000_000_000).toInt();
+    let newCheckInTime : Int = dayStartNs + ((newCheckInHour * 60 + newCheckInMinute) * 60 * 1_000_000_000).toInt();
     let updated : AttendanceRecord = {
       existing with
       checkInTime = ?newCheckInTime;
@@ -461,6 +475,7 @@ actor {
     attendanceRecords.add(attendanceId, updated);
   };
 
+  // Fix: compute dayStartNs from the passed date string (epoch-days), not from Time.now()
   public shared ({ caller }) func updateCheckOutTime(
     adminPassword : Text,
     staffId : Nat,
@@ -495,8 +510,13 @@ actor {
       case (?r) { r };
     };
 
-    let dayStartNs : Int = (Time.now() / (24 * 60 * 60 * 1_000_000_000)) * (24 * 60 * 60 * 1_000_000_000);
-    let newCheckOutTime : Int = dayStartNs + (newCheckOutHour * 60 + newCheckOutMinute) * 60 * 1_000_000_000;
+    // Use the passed date (epoch-days) to compute the correct day start in nanoseconds
+    let epochDays = switch (Nat.fromText(date)) {
+      case (null) { Runtime.trap("Invalid date format") };
+      case (?d) { d };
+    };
+    let dayStartNs : Int = (epochDays * 24 * 60 * 60 * 1_000_000_000).toInt();
+    let newCheckOutTime : Int = dayStartNs + ((newCheckOutHour * 60 + newCheckOutMinute) * 60 * 1_000_000_000).toInt();
 
     let updated : AttendanceRecord = {
       existing with
@@ -692,4 +712,3 @@ actor {
   };
 
 };
-

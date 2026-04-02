@@ -30,7 +30,7 @@ interface StaffPortalPageProps {
 }
 
 function formatNanoTimestamp(ns: bigint | undefined | null): string {
-  if (ns == null) return "—";
+  if (ns == null) return "\u2014";
   const ms = Number(ns / 1_000_000n);
   return new Date(ms).toLocaleString(undefined, {
     month: "short",
@@ -87,6 +87,34 @@ function computeOvertimeInfo(
   return { isEarlyExit: diff < -5, overtimeMinutes: diff > 5 ? diff : 0 };
 }
 
+/** 2-minute cooldown hook after checkout */
+function useCheckInCooldown(checkOutTime: bigint | undefined | null): {
+  canCheckIn: boolean;
+  secondsLeft: number;
+} {
+  const COOLDOWN_MS = 2 * 60 * 1000; // 2 minutes
+  const [now, setNow] = useState(Date.now());
+
+  useEffect(() => {
+    if (checkOutTime == null) return;
+    const checkOutMs = Number(checkOutTime / 1_000_000n);
+    const elapsed = Date.now() - checkOutMs;
+    if (elapsed < COOLDOWN_MS) {
+      const interval = setInterval(() => setNow(Date.now()), 1000);
+      return () => clearInterval(interval);
+    }
+  }, [checkOutTime]);
+
+  if (checkOutTime == null) return { canCheckIn: true, secondsLeft: 0 };
+
+  const checkOutMs = Number(checkOutTime / 1_000_000n);
+  const elapsed = now - checkOutMs;
+  const remaining = COOLDOWN_MS - elapsed;
+
+  if (remaining <= 0) return { canCheckIn: true, secondsLeft: 0 };
+  return { canCheckIn: false, secondsLeft: Math.ceil(remaining / 1000) };
+}
+
 export default function StaffPortalPage({
   staff,
   onBack,
@@ -132,16 +160,38 @@ export default function StaffPortalPage({
   });
 
   // Find today's attendance record for this staff member
-  const todayAttendance: AttendanceRecord | undefined = attendanceList?.find(
+  // There may be multiple records for today (re-check-in) — find the latest one
+  const todayAttendanceRecords: AttendanceRecord[] = (
+    attendanceList ?? []
+  ).filter(
     (r) => r.staffId === staff.id || String(r.staffId) === String(staff.id),
   );
 
-  // Find today's earnings — compare using epoch-days format (matches backend)
-  const todayEarnings: EarningsEntry | undefined = earningsList?.find(
+  // Current open record (checked in, not yet checked out)
+  const openAttendance: AttendanceRecord | undefined =
+    todayAttendanceRecords.find(
+      (r) => r.checkInTime != null && r.checkOutTime == null,
+    );
+
+  // Most recent completed record (checked in AND checked out)
+  const lastCompletedAttendance: AttendanceRecord | undefined =
+    todayAttendanceRecords
+      .filter((r) => r.checkInTime != null && r.checkOutTime != null)
+      .sort((a, b) => {
+        const aOut = a.checkOutTime != null ? Number(a.checkOutTime) : 0;
+        const bOut = b.checkOutTime != null ? Number(b.checkOutTime) : 0;
+        return bOut - aOut;
+      })[0];
+
+  // Use open record for display if present, else show last completed
+  const todayAttendance: AttendanceRecord | undefined =
+    openAttendance ?? lastCompletedAttendance ?? todayAttendanceRecords[0];
+
+  // Find today's earnings
+  const todayEarnings: EarningsEntry | undefined = (earningsList ?? []).find(
     (e) => e.date === todayDate,
   );
 
-  // Derive the displayed earnings input: use user's typed value if set, else fall back to saved
   const displayedEarningsInput =
     earningsInput !== null
       ? earningsInput
@@ -149,17 +199,25 @@ export default function StaffPortalPage({
         ? todayEarnings.parts.map(String).join("+")
         : "";
 
-  // Robust check-in/out state using null-safe comparisons
   const isCheckedIn =
-    !!todayAttendance &&
-    todayAttendance.checkInTime != null &&
-    todayAttendance.checkOutTime == null;
-  const isCheckedOut =
-    !!todayAttendance &&
-    todayAttendance.checkInTime != null &&
-    todayAttendance.checkOutTime != null;
+    !!openAttendance &&
+    openAttendance.checkInTime != null &&
+    openAttendance.checkOutTime == null;
 
-  // Frontend-computed late/overtime info (more reliable than backend flags)
+  const isCheckedOut =
+    !openAttendance &&
+    !!lastCompletedAttendance &&
+    lastCompletedAttendance.checkOutTime != null;
+
+  // 2-minute cooldown after checkout
+  const checkOutTimeForCooldown = isCheckedOut
+    ? lastCompletedAttendance?.checkOutTime
+    : null;
+  const { canCheckIn: cooldownDone, secondsLeft } = useCheckInCooldown(
+    checkOutTimeForCooldown,
+  );
+
+  // Frontend-computed late/overtime info
   const lateInfo =
     todayAttendance?.checkInTime != null
       ? computeLateInfo(todayAttendance.checkInTime, staff.shiftStart)
@@ -206,9 +264,10 @@ export default function StaffPortalPage({
         msg.includes("not found") ||
         msg.includes("no attendance")
       ) {
-        toast.error("আজকের check-in রেকর্ড পাওয়া যায়নি। প্রথমে check-in করুন।", {
-          duration: 5000,
-        });
+        toast.error(
+          "\u0986\u099c\u0995\u09c7\u09b0 check-in \u09b0\u09c7\u0995\u09b0\u09cd\u09a1 \u09aa\u09be\u0993\u09df\u09be \u09af\u09be\u09df\u09a8\u09bf\u0964 \u09aa\u09cd\u09b0\u09a5\u09ae\u09c7 check-in \u0995\u09b0\u09c1\u09a8\u0964",
+          { duration: 5000 },
+        );
       } else {
         toast.error("Check-out failed. Please try again.");
       }
@@ -242,6 +301,11 @@ export default function StaffPortalPage({
   const parsedParts = parseEarningsParts(displayedEarningsInput);
   const computedTotal = sumParts(parsedParts);
   const isLoading = isLoadingAttendance || isFetching || isLoadingEarnings;
+
+  // Determine if Check-In should be enabled
+  // Disabled if: already checked in, OR in cooldown period after checkout
+  const checkInDisabled =
+    isCheckedIn || !cooldownDone || checkInMutation.isPending || isLoading;
 
   return (
     <div className="min-h-screen bg-background relative overflow-hidden">
@@ -345,7 +409,7 @@ export default function StaffPortalPage({
               <div className="flex items-center gap-2 mt-1.5 text-sm text-muted-foreground">
                 <Clock className="w-3.5 h-3.5" />
                 <span>
-                  Shift: {staff.shiftStart} – {staff.shiftEnd}
+                  Shift: {staff.shiftStart} \u2013 {staff.shiftEnd}
                 </span>
               </div>
               {staff.isPremium && (
@@ -353,7 +417,7 @@ export default function StaffPortalPage({
                   className="text-xs mt-1"
                   style={{ color: "oklch(0.76 0.15 85 / 0.7)" }}
                 >
-                  Flexible schedule — no timing restrictions
+                  Flexible schedule \u2014 no timing restrictions
                 </p>
               )}
             </div>
@@ -390,7 +454,7 @@ export default function StaffPortalPage({
           </div>
 
           {/* Status badge */}
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-3 flex-wrap">
             {isCheckedIn && (
               <span
                 className="flex items-center gap-2 text-sm font-medium px-3 py-1.5 rounded-full"
@@ -430,6 +494,20 @@ export default function StaffPortalPage({
                 Not Yet In
               </span>
             )}
+            {/* Cooldown badge */}
+            {isCheckedOut && !cooldownDone && (
+              <span
+                className="flex items-center gap-2 text-xs font-medium px-3 py-1.5 rounded-full"
+                style={{
+                  background: "oklch(0.76 0.15 85 / 0.10)",
+                  color: "oklch(0.76 0.15 85 / 0.8)",
+                  border: "1px solid oklch(0.76 0.15 85 / 0.25)",
+                }}
+              >
+                <Clock className="w-3 h-3" />
+                Re-check-in available in {secondsLeft}s
+              </span>
+            )}
           </div>
 
           {/* Timestamps */}
@@ -450,7 +528,7 @@ export default function StaffPortalPage({
             </div>
           )}
 
-          {/* Flags — frontend-computed (reliable) */}
+          {/* Flags */}
           {!staff.isPremium && todayAttendance && (
             <div className="flex flex-wrap gap-2">
               {lateInfo?.isLate && (
@@ -501,7 +579,7 @@ export default function StaffPortalPage({
                       border: "1px solid oklch(0.68 0.18 148 / 0.25)",
                     }}
                   >
-                    ✓ On Time
+                    \u2713 On Time
                   </span>
                 )}
             </div>
@@ -511,7 +589,7 @@ export default function StaffPortalPage({
               className="text-xs"
               style={{ color: "oklch(0.76 0.15 85 / 0.7)" }}
             >
-              ✦ Premium staff — flexible schedule, no attendance flags
+              \u2746 Premium staff \u2014 flexible schedule, no attendance flags
             </p>
           )}
 
@@ -520,20 +598,16 @@ export default function StaffPortalPage({
             <Button
               data-ocid="staff_portal.checkin_button"
               onClick={() => checkInMutation.mutate()}
-              disabled={
-                isCheckedIn ||
-                isCheckedOut ||
-                checkInMutation.isPending ||
-                isLoading
-              }
+              disabled={checkInDisabled}
               className="flex-1 font-body font-semibold"
               style={{
-                background:
-                  isCheckedIn || isCheckedOut
-                    ? "oklch(0.20 0.006 60)"
+                background: isCheckedIn
+                  ? "oklch(0.20 0.006 60)"
+                  : isCheckedOut && !cooldownDone
+                    ? "oklch(0.22 0.010 60)"
                     : "oklch(0.68 0.18 148)",
                 color:
-                  isCheckedIn || isCheckedOut
+                  isCheckedIn || (isCheckedOut && !cooldownDone)
                     ? "oklch(0.40 0.006 60)"
                     : "oklch(0.08 0 0)",
                 border: "none",
@@ -548,7 +622,12 @@ export default function StaffPortalPage({
                       borderTopColor: "currentColor",
                     }}
                   />
-                  Checking In…
+                  Checking In\u2026
+                </div>
+              ) : isCheckedOut && !cooldownDone ? (
+                <div className="flex items-center gap-2">
+                  <Clock className="w-4 h-4" />
+                  Wait {secondsLeft}s
                 </div>
               ) : (
                 <div className="flex items-center gap-2">
@@ -580,7 +659,7 @@ export default function StaffPortalPage({
                       borderTopColor: "currentColor",
                     }}
                   />
-                  Checking Out…
+                  Checking Out\u2026
                 </div>
               ) : (
                 <div className="flex items-center gap-2">
@@ -645,7 +724,7 @@ export default function StaffPortalPage({
                     Total Earnings Today
                   </p>
                   <p className="font-display text-3xl font-bold gold-text-gradient">
-                    ₹{Number(computedTotal).toLocaleString()}
+                    \u20b9{Number(computedTotal).toLocaleString()}
                   </p>
                   <p className="text-xs text-muted-foreground mt-1">
                     {parsedParts.join(" + ")} ={" "}
@@ -671,7 +750,7 @@ export default function StaffPortalPage({
                 <div className="text-sm">
                   <span className="text-foreground font-medium">Saved:</span>{" "}
                   <span className="text-muted-foreground">
-                    ₹{Number(todayEarnings.total).toLocaleString()} (
+                    \u20b9{Number(todayEarnings.total).toLocaleString()} (
                     {todayEarnings.parts.map(String).join(" + ")})
                   </span>
                 </div>
@@ -706,7 +785,7 @@ export default function StaffPortalPage({
                       borderTopColor: "black",
                     }}
                   />
-                  Saving…
+                  Saving\u2026
                 </div>
               ) : (
                 <div className="flex items-center gap-2">

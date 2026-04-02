@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   AlertTriangle,
+  Calendar,
   Check,
   Clock,
   Crown,
@@ -33,6 +34,24 @@ function formatNanoTimestamp(ns: bigint | undefined | null): string {
 /** Returns epoch-days string (matches backend date storage format) */
 function getTodayEpochDays(): string {
   return Math.floor(Date.now() / (24 * 60 * 60 * 1000)).toString();
+}
+
+/** Convert epoch-days string to YYYY-MM-DD local date string for input[type=date] */
+function epochDaysToDateInput(epochDays: string): string {
+  const ms = Number(epochDays) * 24 * 60 * 60 * 1000;
+  // Use UTC date parts to avoid timezone shift
+  const d = new Date(ms);
+  const year = d.getUTCFullYear();
+  const month = String(d.getUTCMonth() + 1).padStart(2, "0");
+  const day = String(d.getUTCDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+/** Convert YYYY-MM-DD to epoch-days string */
+function dateInputToEpochDays(dateStr: string): string {
+  const [y, m, d] = dateStr.split("-").map(Number);
+  const dt = new Date(Date.UTC(y, (m ?? 1) - 1, d ?? 1));
+  return Math.floor(dt.getTime() / (24 * 60 * 60 * 1000)).toString();
 }
 
 /** Format minutes as "Xh Ym" */
@@ -93,9 +112,11 @@ function StaffStatusCard({
 
   const [editCheckInMode, setEditCheckInMode] = useState(false);
   const [editCheckInTime, setEditCheckInTime] = useState("");
+  const [editCheckInDate, setEditCheckInDate] = useState("");
 
   const [editCheckOutMode, setEditCheckOutMode] = useState(false);
   const [editCheckOutTime, setEditCheckOutTime] = useState("");
+  const [editCheckOutDate, setEditCheckOutDate] = useState("");
 
   const isCheckedIn =
     !!attendance &&
@@ -118,29 +139,33 @@ function StaffStatusCard({
       : null;
 
   const editCheckInMutation = useMutation({
-    mutationFn: async (timeStr: string) => {
+    mutationFn: async ({
+      timeStr,
+      dateStr,
+    }: { timeStr: string; dateStr: string }) => {
       if (!actor || !attendance) throw new Error("Not ready");
       const [hStr, mStr] = timeStr.split(":");
       const h = Number.parseInt(hStr ?? "0", 10);
       const m = Number.parseInt(mStr ?? "0", 10);
-      // Convert local time to UTC before sending to backend
-      const localDate = new Date();
-      localDate.setHours(h, m, 0, 0);
-      const utcH = localDate.getUTCHours();
-      const utcM = localDate.getUTCMinutes();
+      // Use the selected date (epoch-days) for the record
+      const targetDate = dateStr
+        ? dateInputToEpochDays(dateStr)
+        : attendance.date;
       await actor.updateCheckInTime(
         "Fancy0308",
         staff.id,
-        attendance.date,
-        BigInt(utcH),
-        BigInt(utcM),
+        targetDate,
+        BigInt(h),
+        BigInt(m),
       );
     },
     onSuccess: () => {
       toast.success("Check-in time updated!");
       queryClient.invalidateQueries({ queryKey: ["todayAttendance"] });
+      queryClient.invalidateQueries({ queryKey: ["allAttendanceRecords"] });
       setEditCheckInMode(false);
       setEditCheckInTime("");
+      setEditCheckInDate("");
     },
     onError: (err: unknown) => {
       toast.error(err instanceof Error ? err.message : "Update failed");
@@ -148,29 +173,32 @@ function StaffStatusCard({
   });
 
   const editCheckOutMutation = useMutation({
-    mutationFn: async (timeStr: string) => {
+    mutationFn: async ({
+      timeStr,
+      dateStr,
+    }: { timeStr: string; dateStr: string }) => {
       if (!actor || !attendance) throw new Error("Not ready");
       const [hStr, mStr] = timeStr.split(":");
       const h = Number.parseInt(hStr ?? "0", 10);
       const m = Number.parseInt(mStr ?? "0", 10);
-      // Convert local time to UTC before sending to backend
-      const localDate = new Date();
-      localDate.setHours(h, m, 0, 0);
-      const utcH = localDate.getUTCHours();
-      const utcM = localDate.getUTCMinutes();
+      const targetDate = dateStr
+        ? dateInputToEpochDays(dateStr)
+        : attendance.date;
       await actor.updateCheckOutTime(
         "Fancy0308",
         staff.id,
-        attendance.date,
-        BigInt(utcH),
-        BigInt(utcM),
+        targetDate,
+        BigInt(h),
+        BigInt(m),
       );
     },
     onSuccess: () => {
       toast.success("Check-out time updated!");
       queryClient.invalidateQueries({ queryKey: ["todayAttendance"] });
+      queryClient.invalidateQueries({ queryKey: ["allAttendanceRecords"] });
       setEditCheckOutMode(false);
       setEditCheckOutTime("");
+      setEditCheckOutDate("");
     },
     onError: (err: unknown) => {
       toast.error(err instanceof Error ? err.message : "Update failed");
@@ -181,6 +209,9 @@ function StaffStatusCard({
     if (attendance?.checkInTime != null) {
       setEditCheckInTime(timeStringFromNano(attendance.checkInTime));
     }
+    setEditCheckInDate(
+      epochDaysToDateInput(attendance?.date ?? getTodayEpochDays()),
+    );
     setEditCheckInMode(true);
     setEditCheckOutMode(false);
   }
@@ -189,6 +220,9 @@ function StaffStatusCard({
     if (attendance?.checkOutTime != null) {
       setEditCheckOutTime(timeStringFromNano(attendance.checkOutTime));
     }
+    setEditCheckOutDate(
+      epochDaysToDateInput(attendance?.date ?? getTodayEpochDays()),
+    );
     setEditCheckOutMode(true);
     setEditCheckInMode(false);
   }
@@ -200,21 +234,30 @@ function StaffStatusCard({
 
   function EditPanel({
     label,
-    value,
-    onChange,
+    timeValue,
+    onTimeChange,
+    dateValue,
+    onDateChange,
     onConfirm,
     onCancel,
     isPending,
     ocidPrefix,
   }: {
     label: string;
-    value: string;
-    onChange: (v: string) => void;
+    timeValue: string;
+    onTimeChange: (v: string) => void;
+    dateValue: string;
+    onDateChange: (v: string) => void;
     onConfirm: () => void;
     onCancel: () => void;
     isPending: boolean;
     ocidPrefix: string;
   }) {
+    const inputStyle = {
+      background: "oklch(0.10 0.006 60)",
+      border: "1px solid oklch(0.76 0.15 85 / 0.35)",
+      colorScheme: "dark" as const,
+    };
     return (
       <motion.div
         initial={{ opacity: 0, y: -4 }}
@@ -228,24 +271,45 @@ function StaffStatusCard({
             {label}
           </span>
         </div>
-        <input
-          type="time"
-          value={value}
-          onChange={(e) => onChange(e.target.value)}
-          data-ocid={`${ocidPrefix}_time_input.${index + 1}`}
-          className="w-full rounded-md px-2.5 py-1.5 text-sm text-foreground bg-transparent outline-none"
-          style={{
-            background: "oklch(0.10 0.006 60)",
-            border: "1px solid oklch(0.76 0.15 85 / 0.35)",
-            colorScheme: "dark",
-          }}
-        />
+        {/* Date input */}
+        <div className="space-y-1">
+          <div className="flex items-center gap-1">
+            <Calendar className="w-2.5 h-2.5 text-muted-foreground" />
+            <span className="text-[9px] text-muted-foreground uppercase tracking-wide">
+              Date
+            </span>
+          </div>
+          <input
+            type="date"
+            value={dateValue}
+            onChange={(e) => onDateChange(e.target.value)}
+            className="w-full rounded-md px-2.5 py-1.5 text-sm text-foreground bg-transparent outline-none"
+            style={inputStyle}
+          />
+        </div>
+        {/* Time input */}
+        <div className="space-y-1">
+          <div className="flex items-center gap-1">
+            <Clock className="w-2.5 h-2.5 text-muted-foreground" />
+            <span className="text-[9px] text-muted-foreground uppercase tracking-wide">
+              Time
+            </span>
+          </div>
+          <input
+            type="time"
+            value={timeValue}
+            onChange={(e) => onTimeChange(e.target.value)}
+            data-ocid={`${ocidPrefix}_time_input.${index + 1}`}
+            className="w-full rounded-md px-2.5 py-1.5 text-sm text-foreground bg-transparent outline-none"
+            style={inputStyle}
+          />
+        </div>
         <div className="flex gap-1.5">
           <button
             type="button"
             data-ocid={`${ocidPrefix}_confirm_button.${index + 1}`}
             onClick={onConfirm}
-            disabled={!value || isPending}
+            disabled={!timeValue || !dateValue || isPending}
             className="flex-1 flex items-center justify-center gap-1 text-xs font-medium py-1.5 rounded-md transition-colors disabled:opacity-50"
             style={{
               background: "oklch(0.76 0.15 85)",
@@ -347,7 +411,7 @@ function StaffStatusCard({
                 type="button"
                 onClick={openCheckInEdit}
                 className="p-1 rounded-md transition-colors hover:bg-[oklch(0.76_0.15_85_/_0.15)] text-muted-foreground hover:text-gold"
-                title="Edit check-in time"
+                title="Edit check-in time/date"
               >
                 <Pencil className="w-3 h-3" />
               </button>
@@ -366,7 +430,7 @@ function StaffStatusCard({
                 type="button"
                 onClick={openCheckInEdit}
                 className="p-0.5 rounded transition-colors hover:bg-[oklch(0.76_0.15_85_/_0.15)] text-muted-foreground hover:text-gold"
-                title="Edit check-in time"
+                title="Edit check-in time/date"
               >
                 <Pencil className="w-3 h-3" />
               </button>
@@ -388,7 +452,7 @@ function StaffStatusCard({
                 type="button"
                 onClick={openCheckOutEdit}
                 className="p-0.5 rounded transition-colors hover:bg-[oklch(0.76_0.15_85_/_0.15)] text-muted-foreground hover:text-gold"
-                title="Edit check-out time"
+                title="Edit check-out time/date"
               >
                 <Pencil className="w-3 h-3" />
               </button>
@@ -412,13 +476,21 @@ function StaffStatusCard({
         {/* Check-in edit panel */}
         {editCheckInMode && (
           <EditPanel
-            label="Edit Check-in Time"
-            value={editCheckInTime}
-            onChange={setEditCheckInTime}
-            onConfirm={() => editCheckInMutation.mutate(editCheckInTime)}
+            label="Edit Check-in Date & Time"
+            timeValue={editCheckInTime}
+            onTimeChange={setEditCheckInTime}
+            dateValue={editCheckInDate}
+            onDateChange={setEditCheckInDate}
+            onConfirm={() =>
+              editCheckInMutation.mutate({
+                timeStr: editCheckInTime,
+                dateStr: editCheckInDate,
+              })
+            }
             onCancel={() => {
               setEditCheckInMode(false);
               setEditCheckInTime("");
+              setEditCheckInDate("");
             }}
             isPending={editCheckInMutation.isPending}
             ocidPrefix="live_status.checkin"
@@ -428,13 +500,21 @@ function StaffStatusCard({
         {/* Check-out edit panel */}
         {editCheckOutMode && (
           <EditPanel
-            label="Edit Check-out Time"
-            value={editCheckOutTime}
-            onChange={setEditCheckOutTime}
-            onConfirm={() => editCheckOutMutation.mutate(editCheckOutTime)}
+            label="Edit Check-out Date & Time"
+            timeValue={editCheckOutTime}
+            onTimeChange={setEditCheckOutTime}
+            dateValue={editCheckOutDate}
+            onDateChange={setEditCheckOutDate}
+            onConfirm={() =>
+              editCheckOutMutation.mutate({
+                timeStr: editCheckOutTime,
+                dateStr: editCheckOutDate,
+              })
+            }
             onCancel={() => {
               setEditCheckOutMode(false);
               setEditCheckOutTime("");
+              setEditCheckOutDate("");
             }}
             isPending={editCheckOutMutation.isPending}
             ocidPrefix="live_status.checkout"
