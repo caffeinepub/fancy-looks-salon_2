@@ -566,15 +566,15 @@ export default function StaffAttendanceTab() {
       if (!actor) return [];
       return actor.getAllAttendanceRecords();
     },
-    enabled: !!actor && !isFetching && view === "monthly",
+    enabled: !!actor && !isFetching,
     refetchInterval: 30_000,
     staleTime: 0,
   });
 
   const isLoading =
     isLoadingStaff ||
-    (view === "daily" ? isLoadingToday : isLoadingAll) ||
-    isFetching;
+    isFetching ||
+    (view === "daily" ? isLoadingToday : isLoadingAll);
   const isError = view === "daily" ? isTodayError : isAllError;
 
   function handleRetry() {

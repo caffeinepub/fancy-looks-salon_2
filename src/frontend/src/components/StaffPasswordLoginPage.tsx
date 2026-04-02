@@ -52,11 +52,12 @@ export default function StaffPasswordLoginPage({
       if (!actor) throw new Error("Not connected");
       // findStaffByPassword returns bigint | null (already unwrapped by Backend class)
       const staffId = await actor.findStaffByPassword(password);
-      if (staffId !== null && staffId !== undefined) {
-        const staff = await actor.getStaffById(staffId as bigint);
-        return staff;
+      // Explicit null check (bigint 0 would be falsy but valid)
+      if (staffId === null || staffId === undefined) {
+        return null;
       }
-      return null;
+      const staff = await actor.getStaffById(staffId);
+      return staff;
     },
     onSuccess: (staff: StaffProfile | null) => {
       if (staff) {
@@ -70,8 +71,19 @@ export default function StaffPasswordLoginPage({
         setErrorMsg("ভুল password। আবার চেষ্টা করুন।");
       }
     },
-    onError: () => {
-      setErrorMsg("যাচাই করতে সমস্যা হয়েছে। পুনরায় চেষ্টা করুন।");
+    onError: (err) => {
+      const msg = err instanceof Error ? err.message : String(err);
+      const lower = msg.toLowerCase();
+      if (
+        lower.includes("stopped") ||
+        lower.includes("unavailable") ||
+        lower.includes("fetch") ||
+        lower.includes("network")
+      ) {
+        setErrorMsg("সার্ভার সাময়িকভাবে বন্ধ। একটু পরে আবার চেষ্টা করুন।");
+      } else {
+        setErrorMsg("যাচাই করতে সমস্যা হয়েছে। পুনরায় চেষ্টা করুন।");
+      }
     },
   });
 

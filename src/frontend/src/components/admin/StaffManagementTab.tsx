@@ -29,7 +29,7 @@ import {
 import { AnimatePresence, motion } from "motion/react";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
-import type { StaffProfile, backendInterface } from "../../backend.d";
+import type { StaffProfile } from "../../backend.d";
 import { useActor } from "../../hooks/useActor";
 
 function isCanisterStoppedError(err: unknown): boolean {
@@ -40,7 +40,11 @@ function isCanisterStoppedError(err: unknown): boolean {
     lower.includes("cc0508") ||
     lower.includes("reject_code: 5") ||
     lower.includes("reject code: 5") ||
-    lower.includes("c0508")
+    lower.includes("c0508") ||
+    lower.includes("fetch") ||
+    lower.includes("network") ||
+    lower.includes("timeout") ||
+    lower.includes("unavailable")
   );
 }
 
@@ -166,7 +170,11 @@ function StaffFormDialog({
   const addMutation = useMutation({
     mutationFn: async () => {
       if (!form.name.trim()) throw new Error("Name is required");
-      if (!actor) throw new Error("Not connected");
+      if (!actor) {
+        if (isFetching)
+          throw new Error("Server connecting, please wait and retry.");
+        throw new Error("Not connected to server. Please refresh and retry.");
+      }
       return actor.addStaff(
         "Fancy0308",
         form.name.trim(),
@@ -665,7 +673,7 @@ function SetPasswordDialog({ open, staff, onClose }: SetPasswordDialogProps) {
     queryKey: ["hasStaffPassword", staff?.id ? String(staff.id) : null],
     queryFn: async () => {
       if (!actor || !staff) return false;
-      return (actor as unknown as backendInterface).hasStaffPassword(staff.id);
+      return actor.hasStaffPassword(staff.id);
     },
     enabled: !!actor && !!staff && open,
   });
@@ -673,11 +681,7 @@ function SetPasswordDialog({ open, staff, onClose }: SetPasswordDialogProps) {
   const setPasswordMutation = useMutation({
     mutationFn: async () => {
       if (!actor || !staff) throw new Error("Not connected");
-      return (actor as unknown as backendInterface).setStaffPassword(
-        "Fancy0308",
-        staff.id,
-        newPassword,
-      );
+      return actor.setStaffPassword("Fancy0308", staff.id, newPassword);
     },
     onSuccess: () => {
       toast.success("Password সফলভাবে সেট হয়েছে");
@@ -1090,7 +1094,7 @@ function StaffRowWithPasswordStatus({
     queryKey: ["hasStaffPassword", String(staff.id)],
     queryFn: async () => {
       if (!actor) return false;
-      return (actor as unknown as backendInterface).hasStaffPassword(staff.id);
+      return actor.hasStaffPassword(staff.id);
     },
     enabled: !!actor,
     staleTime: 30_000,
