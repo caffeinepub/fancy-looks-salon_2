@@ -249,8 +249,8 @@ actor {
     } else { 0 };
   };
 
-  // STAFF MANAGEMENT - Admin only (password + principal check)
-  public shared ({ caller }) func addStaff(
+  // STAFF MANAGEMENT - Password-only auth (no IC identity check)
+  public shared func addStaff(
     adminPassword : Text,
     name : Text,
     photoUrl : Text,
@@ -258,9 +258,6 @@ actor {
     shiftEnd : Text,
     isPremium : Bool,
   ) : async Nat {
-    if (not (AccessControl.hasPermission(accessControlState, caller, #admin))) {
-      Runtime.trap("Unauthorized: Only admins can add staff");
-    };
     verifyAdminPasswordOrTrap(adminPassword);
 
     let id = nextStaffId;
@@ -279,7 +276,7 @@ actor {
     id;
   };
 
-  public shared ({ caller }) func updateStaff(
+  public shared func updateStaff(
     adminPassword : Text,
     id : Nat,
     name : Text,
@@ -289,9 +286,6 @@ actor {
     isPremium : Bool,
     isActive : Bool,
   ) : async () {
-    if (not (AccessControl.hasPermission(accessControlState, caller, #admin))) {
-      Runtime.trap("Unauthorized: Only admins can update staff");
-    };
     verifyAdminPasswordOrTrap(adminPassword);
 
     switch (staffProfiles.get(id)) {
@@ -312,10 +306,7 @@ actor {
     };
   };
 
-  public shared ({ caller }) func removeStaff(adminPassword : Text, id : Nat) : async () {
-    if (not (AccessControl.hasPermission(accessControlState, caller, #admin))) {
-      Runtime.trap("Unauthorized: Only admins can remove staff");
-    };
+  public shared func removeStaff(adminPassword : Text, id : Nat) : async () {
     verifyAdminPasswordOrTrap(adminPassword);
     if (not staffProfiles.containsKey(id)) { Runtime.trap("Staff not found") };
     staffProfiles.remove(id);
@@ -333,12 +324,8 @@ actor {
     };
   };
 
-  // ATTENDANCE - Check-in/out open to users, updates admin-only
-  public shared ({ caller }) func checkIn(staffId : Nat) : async Int {
-    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
-      Runtime.trap("Unauthorized: Only users can check in");
-    };
-
+  // ATTENDANCE - No IC identity check, open to all callers
+  public shared func checkIn(staffId : Nat) : async Int {
     let timestamp = getCurrentTime();
     let staffProfile = switch (staffProfiles.get(staffId)) {
       case (null) { Runtime.trap("Staff not found") };
@@ -382,11 +369,7 @@ actor {
     timestamp;
   };
 
-  public shared ({ caller }) func checkOut(staffId : Nat) : async Int {
-    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
-      Runtime.trap("Unauthorized: Only users can check out");
-    };
-
+  public shared func checkOut(staffId : Nat) : async Int {
     let timestamp = getCurrentTime();
     let staffProfile = switch (staffProfiles.get(staffId)) {
       case (null) { Runtime.trap("Staff not found") };
@@ -436,10 +419,7 @@ actor {
   };
 
   // Fix: compute dayStartNs from the passed date string (epoch-days), not from Time.now()
-  public shared ({ caller }) func updateCheckInTime(adminPassword : Text, staffId : Nat, date : Text, newCheckInHour : Nat, newCheckInMinute : Nat) : async () {
-    if (not (AccessControl.hasPermission(accessControlState, caller, #admin))) {
-      Runtime.trap("Unauthorized: Only admins can update check-in times");
-    };
+  public shared func updateCheckInTime(adminPassword : Text, staffId : Nat, date : Text, newCheckInHour : Nat, newCheckInMinute : Nat) : async () {
     verifyAdminPasswordOrTrap(adminPassword);
 
     let staffProfile = switch (staffProfiles.get(staffId)) {
@@ -476,16 +456,13 @@ actor {
   };
 
   // Fix: compute dayStartNs from the passed date string (epoch-days), not from Time.now()
-  public shared ({ caller }) func updateCheckOutTime(
+  public shared func updateCheckOutTime(
     adminPassword : Text,
     staffId : Nat,
     date : Text,
     newCheckOutHour : Nat,
     newCheckOutMinute : Nat,
   ) : async () {
-    if (not (AccessControl.hasPermission(accessControlState, caller, #admin))) {
-      Runtime.trap("Unauthorized: Only admins can update check-out times");
-    };
     verifyAdminPasswordOrTrap(adminPassword);
 
     let staffProfile = switch (staffProfiles.get(staffId)) {
@@ -541,11 +518,8 @@ actor {
     attendanceRecords.values().toArray();
   };
 
-  // HALF DAY RECORDS - Admin only
-  public shared ({ caller }) func markHalfDay(adminPassword : Text, staffId : Nat, date : Text) : async Nat {
-    if (not (AccessControl.hasPermission(accessControlState, caller, #admin))) {
-      Runtime.trap("Unauthorized: Only admins can mark half days");
-    };
+  // HALF DAY RECORDS - Password-only auth
+  public shared func markHalfDay(adminPassword : Text, staffId : Nat, date : Text) : async Nat {
     verifyAdminPasswordOrTrap(adminPassword);
 
     if (not staffProfiles.containsKey(staffId)) { Runtime.trap("Staff not found") };
@@ -570,10 +544,7 @@ actor {
     };
   };
 
-  public shared ({ caller }) func removeHalfDay(adminPassword : Text, staffId : Nat, date : Text) : async () {
-    if (not (AccessControl.hasPermission(accessControlState, caller, #admin))) {
-      Runtime.trap("Unauthorized: Only admins can remove half days");
-    };
+  public shared func removeHalfDay(adminPassword : Text, staffId : Nat, date : Text) : async () {
     verifyAdminPasswordOrTrap(adminPassword);
 
     for ((id, record) in halfDayRecords.entries()) {
@@ -593,11 +564,8 @@ actor {
     halfDayRecords.values().toArray();
   };
 
-  // EARNINGS - Admin only
-  public shared ({ caller }) func addOrUpdateEarningsEntry(adminPassword : Text, staffId : Nat, date : Text, parts : [Nat]) : async Nat {
-    if (not (AccessControl.hasPermission(accessControlState, caller, #admin))) {
-      Runtime.trap("Unauthorized: Only admins can manage earnings");
-    };
+  // EARNINGS - Password-only auth
+  public shared func addOrUpdateEarningsEntry(adminPassword : Text, staffId : Nat, date : Text, parts : [Nat]) : async Nat {
     verifyAdminPasswordOrTrap(adminPassword);
 
     if (not staffProfiles.containsKey(staffId)) { Runtime.trap("Staff not found") };
@@ -633,10 +601,7 @@ actor {
     };
   };
 
-  public shared ({ caller }) func cleanOldNotifications(adminPassword : Text) : async Nat {
-    if (not (AccessControl.hasPermission(accessControlState, caller, #admin))) {
-      Runtime.trap("Unauthorized: Only admins can clean notifications");
-    };
+  public shared func cleanOldNotifications(adminPassword : Text) : async Nat {
     verifyAdminPasswordOrTrap(adminPassword);
 
     let todayDayNumber = Time.now() / (24 * 60 * 60 * 1_000_000_000);
@@ -657,33 +622,21 @@ actor {
     verifyAdminPasswordInternal(password);
   };
 
-  // USER PROFILE FUNCTIONS - Protected
+  // USER PROFILE FUNCTIONS
   public query ({ caller }) func getCallerUserProfile() : async ?UserProfile {
-    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
-      Runtime.trap("Unauthorized: Only users can view profiles");
-    };
     userProfiles.get(caller);
   };
 
   public query ({ caller }) func getUserProfile(user : Principal) : async ?UserProfile {
-    if (caller != user and not AccessControl.isAdmin(accessControlState, caller)) {
-      Runtime.trap("Unauthorized: Can only view your own profile");
-    };
     userProfiles.get(user);
   };
 
   public shared ({ caller }) func saveCallerUserProfile(profile : UserProfile) : async () {
-    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
-      Runtime.trap("Unauthorized: Only users can save profiles");
-    };
     userProfiles.add(caller, profile);
   };
 
-  // STAFF PASSWORD MANAGEMENT - Admin only
-  public shared ({ caller }) func setStaffPassword(adminPassword : Text, staffId : Nat, newPassword : Text) : async () {
-    if (not (AccessControl.hasPermission(accessControlState, caller, #admin))) {
-      Runtime.trap("Unauthorized: Only admins can set staff passwords");
-    };
+  // STAFF PASSWORD MANAGEMENT - Password-only auth
+  public shared func setStaffPassword(adminPassword : Text, staffId : Nat, newPassword : Text) : async () {
     verifyAdminPasswordOrTrap(adminPassword);
     if (not staffProfiles.containsKey(staffId)) {
       Runtime.trap("Staff not found");

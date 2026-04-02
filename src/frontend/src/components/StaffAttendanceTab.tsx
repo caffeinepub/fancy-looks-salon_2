@@ -14,19 +14,46 @@ import type { AttendanceRecord, StaffProfile } from "../backend.d";
 import { useActor } from "../hooks/useActor";
 
 /**
- * Convert backend epoch-days string to JS Date.
- * Use UTC noon (12:00) to avoid timezone-shift bugs where midnight UTC
- * becomes the previous day in timezones like IST (+5:30).
+ * Convert backend epoch-days (UTC) string to a local Date object.
+ * The backend stores epoch-days as UTC floor(timestamp / 86400s).
+ * To correctly map this to a display date in any timezone, we use
+ * UTC noon so that getUTCFullYear/getUTCMonth/getUTCDate always give
+ * the correct UTC date, while toLocaleDateString uses the same Date
+ * object for display.
  */
 function epochDaysToDate(dateStr: string): Date {
   const epochDays = Number(dateStr);
-  // UTC noon avoids any timezone from rolling back to previous date
+  // UTC noon: safe from any timezone shift
   return new Date(epochDays * 24 * 60 * 60 * 1000 + 12 * 60 * 60 * 1000);
 }
 
-// Get today's epoch days string
+/**
+ * Get today's epoch-days using the device's local date.
+ * We compute local midnight in the device's timezone so the "today"
+ * epoch-days matches what the device considers today.
+ */
 function getTodayEpochDays(): string {
-  return Math.floor(Date.now() / (24 * 60 * 60 * 1000)).toString();
+  const now = new Date();
+  // Create a date at local midnight
+  const localMidnight = new Date(
+    now.getFullYear(),
+    now.getMonth(),
+    now.getDate(),
+  );
+  return Math.floor(localMidnight.getTime() / (24 * 60 * 60 * 1000)).toString();
+}
+
+/**
+ * Get epoch-days for a given local year/month (0-based)/day.
+ */
+function localDateToEpochDays(
+  year: number,
+  month: number,
+  day: number,
+): number {
+  return Math.floor(
+    new Date(year, month, day).getTime() / (24 * 60 * 60 * 1000),
+  );
 }
 
 // Convert nanosecond bigint timestamp to formatted time string
@@ -39,13 +66,18 @@ function formatNanoTime(ns: bigint | undefined | null): string {
   });
 }
 
-// Format a Date to weekday + date
+// Format a Date to weekday + date (using UTC date values to avoid timezone shift)
 function formatDayHeader(d: Date): string {
-  return d.toLocaleDateString("en-IN", {
+  // Use the UTC date values since our epochDaysToDate uses UTC noon
+  const utcDate = new Date(
+    Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()),
+  );
+  return utcDate.toLocaleDateString("en-IN", {
     weekday: "short",
     day: "numeric",
     month: "short",
     year: "numeric",
+    timeZone: "UTC",
   });
 }
 
@@ -326,11 +358,16 @@ function MonthlyView({
     year: "numeric",
   });
 
-  // Filter records for the selected month
-  // Use epochDaysToDate (UTC noon) so the day comparison is correct
+  // Filter records for the selected month using local date comparison.
+  // We compare epoch-days ranges: find epoch-days for the first and last day
+  // of the selected month in the device's local timezone.
+  const monthStart = localDateToEpochDays(year, month, 1);
+  // Last day of month: day 0 of next month = last day of this month
+  const nextMonthFirst = new Date(year, month + 1, 1);
+  const monthEnd = Math.floor(nextMonthFirst.getTime() / (24 * 60 * 60 * 1000)); // exclusive
   const monthRecords = allRecords.filter((r) => {
-    const d = epochDaysToDate(r.date);
-    return d.getUTCFullYear() === year && d.getUTCMonth() === month;
+    const epochDay = Number(r.date);
+    return epochDay >= monthStart && epochDay < monthEnd;
   });
 
   // Group by date
