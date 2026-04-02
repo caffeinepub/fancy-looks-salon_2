@@ -14,7 +14,10 @@ import {
   AlertTriangle,
   Check,
   Crown,
+  Eye,
+  EyeOff,
   ImagePlus,
+  KeyRound,
   Loader2,
   Pencil,
   Plus,
@@ -26,7 +29,7 @@ import {
 import { AnimatePresence, motion } from "motion/react";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
-import type { StaffProfile } from "../../backend.d";
+import type { StaffProfile, backendInterface } from "../../backend.d";
 import { useActor } from "../../hooks/useActor";
 
 function isCanisterStoppedError(err: unknown): boolean {
@@ -641,12 +644,277 @@ function DeleteConfirmDialog({
   );
 }
 
+// Set/Reset Password Dialog for a staff member
+interface SetPasswordDialogProps {
+  open: boolean;
+  staff: StaffProfile | null;
+  onClose: () => void;
+}
+
+function SetPasswordDialog({ open, staff, onClose }: SetPasswordDialogProps) {
+  const queryClient = useQueryClient();
+  const { actor } = useActor();
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [showNew, setShowNew] = useState(false);
+  const [showConfirm, setShowConfirm] = useState(false);
+  const [validationError, setValidationError] = useState("");
+
+  // Check if password already set
+  const { data: hasPassword } = useQuery({
+    queryKey: ["hasStaffPassword", staff?.id ? String(staff.id) : null],
+    queryFn: async () => {
+      if (!actor || !staff) return false;
+      return (actor as unknown as backendInterface).hasStaffPassword(staff.id);
+    },
+    enabled: !!actor && !!staff && open,
+  });
+
+  const setPasswordMutation = useMutation({
+    mutationFn: async () => {
+      if (!actor || !staff) throw new Error("Not connected");
+      return (actor as unknown as backendInterface).setStaffPassword(
+        "Fancy0308",
+        staff.id,
+        newPassword,
+      );
+    },
+    onSuccess: () => {
+      toast.success("Password সফলভাবে সেট হয়েছে");
+      queryClient.invalidateQueries({
+        queryKey: ["hasStaffPassword", staff?.id ? String(staff.id) : null],
+      });
+      handleClose();
+    },
+    onError: (err) => {
+      toast.error(
+        err instanceof Error ? err.message : "Password সেট করা সম্ভব হয়নি।",
+      );
+    },
+  });
+
+  const handleClose = () => {
+    setNewPassword("");
+    setConfirmPassword("");
+    setValidationError("");
+    setShowNew(false);
+    setShowConfirm(false);
+    onClose();
+  };
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    setValidationError("");
+    if (newPassword.length < 4) {
+      setValidationError("Password কমপক্ষে ৪ অক্ষরের হতে হবে।");
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      setValidationError("Password দুটো মিলছে না।");
+      return;
+    }
+    setPasswordMutation.mutate();
+  };
+
+  const isReset = hasPassword === true;
+
+  return (
+    <Dialog open={open} onOpenChange={(v) => !v && handleClose()}>
+      <DialogContent
+        data-ocid="staff_mgmt.set_password_dialog"
+        className="max-w-sm font-body"
+        style={{
+          background: "oklch(0.13 0.006 60)",
+          border: "1px solid oklch(0.76 0.15 85 / 0.25)",
+        }}
+      >
+        <DialogHeader>
+          <DialogTitle className="font-display text-xl text-foreground flex items-center gap-2">
+            <KeyRound
+              className="w-5 h-5"
+              style={{ color: "oklch(0.76 0.15 85)" }}
+            />
+            Staff Password সেট করুন
+          </DialogTitle>
+        </DialogHeader>
+
+        {/* Staff info */}
+        <div
+          className="flex items-center gap-3 rounded-lg p-3"
+          style={{
+            background: "oklch(0.76 0.15 85 / 0.06)",
+            border: "1px solid oklch(0.76 0.15 85 / 0.15)",
+          }}
+        >
+          <div
+            className="w-10 h-10 rounded-full overflow-hidden flex-shrink-0"
+            style={{ border: "1.5px solid oklch(0.76 0.15 85 / 0.3)" }}
+          >
+            {staff?.photoUrl ? (
+              <img
+                src={staff.photoUrl}
+                alt={staff.name}
+                className="w-full h-full object-cover"
+                onError={(e) => {
+                  const img = e.currentTarget as HTMLImageElement;
+                  img.src = `https://i.pravatar.cc/150?img=${(Number(staff.id) % 70) + 1}`;
+                }}
+              />
+            ) : (
+              <div
+                className="w-full h-full flex items-center justify-center"
+                style={{ background: "oklch(0.20 0.012 80)" }}
+              >
+                <UserCircle2 className="w-5 h-5 text-gold opacity-60" />
+              </div>
+            )}
+          </div>
+          <div>
+            <p className="font-display font-semibold text-sm text-foreground">
+              {staff?.name}
+            </p>
+            <p className="text-xs text-muted-foreground">
+              {isReset ? "Password পরিবর্তন" : "নতুন Password সেট"}
+            </p>
+          </div>
+        </div>
+
+        <form onSubmit={handleSubmit} className="space-y-4">
+          {/* New password */}
+          <div className="space-y-1.5">
+            <Label className="text-xs text-muted-foreground uppercase tracking-widest">
+              {isReset ? "নতুন Password" : "Password"}
+            </Label>
+            <div className="relative">
+              <Input
+                data-ocid="staff_mgmt.new_password_input"
+                type={showNew ? "text" : "password"}
+                value={newPassword}
+                onChange={(e) => {
+                  setNewPassword(e.target.value);
+                  setValidationError("");
+                }}
+                placeholder="নতুন password দিন"
+                className="bg-input border-border text-foreground pr-10"
+                autoFocus
+                minLength={4}
+              />
+              <button
+                type="button"
+                onClick={() => setShowNew((p) => !p)}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-gold transition-colors"
+                tabIndex={-1}
+              >
+                {showNew ? (
+                  <EyeOff className="w-4 h-4" />
+                ) : (
+                  <Eye className="w-4 h-4" />
+                )}
+              </button>
+            </div>
+          </div>
+
+          {/* Confirm password */}
+          <div className="space-y-1.5">
+            <Label className="text-xs text-muted-foreground uppercase tracking-widest">
+              Password নিশ্চিত করুন
+            </Label>
+            <div className="relative">
+              <Input
+                data-ocid="staff_mgmt.confirm_password_input"
+                type={showConfirm ? "text" : "password"}
+                value={confirmPassword}
+                onChange={(e) => {
+                  setConfirmPassword(e.target.value);
+                  setValidationError("");
+                }}
+                placeholder="আবার password দিন"
+                className="bg-input border-border text-foreground pr-10"
+                minLength={4}
+              />
+              <button
+                type="button"
+                onClick={() => setShowConfirm((p) => !p)}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-gold transition-colors"
+                tabIndex={-1}
+              >
+                {showConfirm ? (
+                  <EyeOff className="w-4 h-4" />
+                ) : (
+                  <Eye className="w-4 h-4" />
+                )}
+              </button>
+            </div>
+          </div>
+
+          {/* Validation error */}
+          <AnimatePresence>
+            {validationError && (
+              <motion.p
+                data-ocid="staff_mgmt.password_error"
+                initial={{ opacity: 0, y: -4 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -4 }}
+                className="text-xs"
+                style={{ color: "oklch(0.65 0.22 22)" }}
+              >
+                {validationError}
+              </motion.p>
+            )}
+          </AnimatePresence>
+
+          <DialogFooter className="gap-2 pt-1">
+            <Button
+              data-ocid="staff_mgmt.cancel_button"
+              type="button"
+              variant="ghost"
+              onClick={handleClose}
+              className="font-body text-muted-foreground hover:text-foreground"
+            >
+              বাতিল
+            </Button>
+            <Button
+              data-ocid="staff_mgmt.save_password_button"
+              type="submit"
+              disabled={setPasswordMutation.isPending}
+              className="font-body font-semibold"
+              style={{
+                background: "oklch(0.76 0.15 85)",
+                color: "oklch(0.08 0 0)",
+                border: "none",
+              }}
+            >
+              {setPasswordMutation.isPending ? (
+                <div className="flex items-center gap-2">
+                  <div
+                    className="gold-spinner w-4 h-4"
+                    style={{ borderTopColor: "black" }}
+                  />
+                  সেভ হচ্ছে…
+                </div>
+              ) : (
+                <div className="flex items-center gap-2">
+                  <KeyRound className="w-4 h-4" />
+                  Password সেভ করুন
+                </div>
+              )}
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 export default function StaffManagementTab() {
   const queryClient = useQueryClient();
   const { actor, isFetching } = useActor();
   const [showAddDialog, setShowAddDialog] = useState(false);
   const [editingStaff, setEditingStaff] = useState<StaffProfile | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<StaffProfile | null>(null);
+  const [passwordTarget, setPasswordTarget] = useState<StaffProfile | null>(
+    null,
+  );
 
   const { data: staffList, isLoading } = useQuery({
     queryKey: ["allStaff"],
@@ -755,113 +1023,14 @@ export default function StaffManagementTab() {
           ) : (
             <div className="space-y-2">
               {allStaff.map((staff, i) => (
-                <motion.div
+                <StaffRowWithPasswordStatus
                   key={String(staff.id)}
-                  data-ocid={`staff_mgmt.staff_row.${i + 1}`}
-                  initial={{ opacity: 0, x: -10 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  transition={{ delay: i * 0.04, duration: 0.3 }}
-                  className="rounded-xl p-4 flex flex-wrap items-center gap-4"
-                  style={{
-                    background: "oklch(0.13 0.006 60)",
-                    border: `1px solid ${staff.isActive ? "oklch(0.26 0.010 70)" : "oklch(0.20 0.006 60)"}`,
-                    opacity: staff.isActive ? 1 : 0.6,
-                  }}
-                >
-                  {/* Photo */}
-                  <div className="relative flex-shrink-0">
-                    <div
-                      className="w-12 h-12 rounded-full overflow-hidden"
-                      style={{
-                        border: "1.5px solid oklch(0.76 0.15 85 / 0.3)",
-                      }}
-                    >
-                      {staff.photoUrl ? (
-                        <img
-                          src={staff.photoUrl}
-                          alt={staff.name}
-                          className="w-full h-full object-cover"
-                          onError={(e) => {
-                            const img = e.currentTarget as HTMLImageElement;
-                            img.src = `https://i.pravatar.cc/150?img=${(Number(staff.id) % 70) + 1}`;
-                          }}
-                        />
-                      ) : (
-                        <div
-                          className="w-full h-full flex items-center justify-center"
-                          style={{ background: "oklch(0.20 0.012 80)" }}
-                        >
-                          <UserCircle2 className="w-7 h-7 text-gold opacity-50" />
-                        </div>
-                      )}
-                    </div>
-                    {staff.isPremium && (
-                      <div
-                        className="absolute -bottom-0.5 -right-0.5 w-4 h-4 rounded-full flex items-center justify-center"
-                        style={{ background: "oklch(0.76 0.15 85)" }}
-                      >
-                        <Crown className="w-2 h-2 text-background" />
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Info */}
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <p className="font-display font-semibold text-sm text-foreground">
-                        {staff.name}
-                      </p>
-                      {!staff.isActive && (
-                        <span
-                          className="text-[10px] px-1.5 py-0.5 rounded text-muted-foreground"
-                          style={{
-                            background: "oklch(0.20 0.006 60)",
-                            border: "1px solid oklch(0.28 0.006 60)",
-                          }}
-                        >
-                          Inactive
-                        </span>
-                      )}
-                      {staff.isPremium && (
-                        <span
-                          className="text-[10px] px-1.5 py-0.5 rounded"
-                          style={{
-                            background: "oklch(0.76 0.15 85 / 0.12)",
-                            color: "oklch(0.76 0.15 85)",
-                            border: "1px solid oklch(0.76 0.15 85 / 0.25)",
-                          }}
-                        >
-                          Premium
-                        </span>
-                      )}
-                    </div>
-                    <p className="text-xs text-muted-foreground mt-0.5">
-                      Shift: {staff.shiftStart} – {staff.shiftEnd}
-                    </p>
-                  </div>
-
-                  {/* Actions */}
-                  <div className="flex items-center gap-2">
-                    <Button
-                      data-ocid={`staff_mgmt.edit_button.${i + 1}`}
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => setEditingStaff(staff)}
-                      className="h-8 w-8 p-0 text-muted-foreground hover:text-gold hover:bg-gold/10"
-                    >
-                      <Pencil className="w-3.5 h-3.5" />
-                    </Button>
-                    <Button
-                      data-ocid={`staff_mgmt.delete_button.${i + 1}`}
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => setDeleteTarget(staff)}
-                      className="h-8 w-8 p-0 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </Button>
-                  </div>
-                </motion.div>
+                  staff={staff}
+                  index={i}
+                  onEdit={() => setEditingStaff(staff)}
+                  onDelete={() => setDeleteTarget(staff)}
+                  onSetPassword={() => setPasswordTarget(staff)}
+                />
               ))}
             </div>
           )}
@@ -890,6 +1059,188 @@ export default function StaffManagementTab() {
         onCancel={() => setDeleteTarget(null)}
         isPending={deleteMutation.isPending}
       />
+
+      {/* Set/Reset Password Dialog */}
+      <SetPasswordDialog
+        open={!!passwordTarget}
+        staff={passwordTarget}
+        onClose={() => setPasswordTarget(null)}
+      />
     </div>
+  );
+}
+
+// Per-staff row component that queries its own hasPassword status
+function StaffRowWithPasswordStatus({
+  staff,
+  index,
+  onEdit,
+  onDelete,
+  onSetPassword,
+}: {
+  staff: StaffProfile;
+  index: number;
+  onEdit: () => void;
+  onDelete: () => void;
+  onSetPassword: () => void;
+}) {
+  const { actor } = useActor();
+
+  const { data: hasPassword } = useQuery({
+    queryKey: ["hasStaffPassword", String(staff.id)],
+    queryFn: async () => {
+      if (!actor) return false;
+      return (actor as unknown as backendInterface).hasStaffPassword(staff.id);
+    },
+    enabled: !!actor,
+    staleTime: 30_000,
+  });
+
+  const i = index;
+
+  return (
+    <motion.div
+      data-ocid={`staff_mgmt.staff_row.${i + 1}`}
+      initial={{ opacity: 0, x: -10 }}
+      animate={{ opacity: 1, x: 0 }}
+      transition={{ delay: i * 0.04, duration: 0.3 }}
+      className="rounded-xl p-4 flex flex-wrap items-center gap-4"
+      style={{
+        background: "oklch(0.13 0.006 60)",
+        border: `1px solid ${
+          staff.isActive ? "oklch(0.26 0.010 70)" : "oklch(0.20 0.006 60)"
+        }`,
+        opacity: staff.isActive ? 1 : 0.6,
+      }}
+    >
+      {/* Photo */}
+      <div className="relative flex-shrink-0">
+        <div
+          className="w-12 h-12 rounded-full overflow-hidden"
+          style={{
+            border: "1.5px solid oklch(0.76 0.15 85 / 0.3)",
+          }}
+        >
+          {staff.photoUrl ? (
+            <img
+              src={staff.photoUrl}
+              alt={staff.name}
+              className="w-full h-full object-cover"
+              onError={(e) => {
+                const img = e.currentTarget as HTMLImageElement;
+                img.src = `https://i.pravatar.cc/150?img=${(Number(staff.id) % 70) + 1}`;
+              }}
+            />
+          ) : (
+            <div
+              className="w-full h-full flex items-center justify-center"
+              style={{ background: "oklch(0.20 0.012 80)" }}
+            >
+              <UserCircle2 className="w-7 h-7 text-gold opacity-50" />
+            </div>
+          )}
+        </div>
+        {staff.isPremium && (
+          <div
+            className="absolute -bottom-0.5 -right-0.5 w-4 h-4 rounded-full flex items-center justify-center"
+            style={{ background: "oklch(0.76 0.15 85)" }}
+          >
+            <Crown className="w-2 h-2 text-background" />
+          </div>
+        )}
+      </div>
+
+      {/* Info */}
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-2 flex-wrap">
+          <p className="font-display font-semibold text-sm text-foreground">
+            {staff.name}
+          </p>
+          {!staff.isActive && (
+            <span
+              className="text-[10px] px-1.5 py-0.5 rounded text-muted-foreground"
+              style={{
+                background: "oklch(0.20 0.006 60)",
+                border: "1px solid oklch(0.28 0.006 60)",
+              }}
+            >
+              Inactive
+            </span>
+          )}
+          {staff.isPremium && (
+            <span
+              className="text-[10px] px-1.5 py-0.5 rounded"
+              style={{
+                background: "oklch(0.76 0.15 85 / 0.12)",
+                color: "oklch(0.76 0.15 85)",
+                border: "1px solid oklch(0.76 0.15 85 / 0.25)",
+              }}
+            >
+              Premium
+            </span>
+          )}
+          {/* Password status badge */}
+          <span
+            className="text-[10px] px-1.5 py-0.5 rounded flex items-center gap-1"
+            style={
+              hasPassword
+                ? {
+                    background: "oklch(0.50 0.14 145 / 0.15)",
+                    color: "oklch(0.65 0.14 145)",
+                    border: "1px solid oklch(0.50 0.14 145 / 0.3)",
+                  }
+                : {
+                    background: "oklch(0.60 0.15 55 / 0.10)",
+                    color: "oklch(0.65 0.12 55)",
+                    border: "1px solid oklch(0.60 0.15 55 / 0.25)",
+                  }
+            }
+          >
+            <KeyRound className="w-2.5 h-2.5" />
+            {hasPassword ? "Password সেট" : "No Password"}
+          </span>
+        </div>
+        <p className="text-xs text-muted-foreground mt-0.5">
+          Shift: {staff.shiftStart} – {staff.shiftEnd}
+        </p>
+      </div>
+
+      {/* Actions */}
+      <div className="flex items-center gap-1.5">
+        {/* Set/Reset Password button */}
+        <Button
+          data-ocid={`staff_mgmt.set_password_button.${i + 1}`}
+          variant="ghost"
+          size="sm"
+          onClick={onSetPassword}
+          title={hasPassword ? "Reset Password" : "Set Password"}
+          className="h-8 gap-1.5 px-2 text-xs font-body text-muted-foreground hover:text-gold hover:bg-gold/10"
+          style={{ minWidth: "auto" }}
+        >
+          <KeyRound className="w-3.5 h-3.5" />
+          <span className="hidden sm:inline">
+            {hasPassword ? "Reset" : "Set"} Password
+          </span>
+        </Button>
+        <Button
+          data-ocid={`staff_mgmt.edit_button.${i + 1}`}
+          variant="ghost"
+          size="sm"
+          onClick={onEdit}
+          className="h-8 w-8 p-0 text-muted-foreground hover:text-gold hover:bg-gold/10"
+        >
+          <Pencil className="w-3.5 h-3.5" />
+        </Button>
+        <Button
+          data-ocid={`staff_mgmt.delete_button.${i + 1}`}
+          variant="ghost"
+          size="sm"
+          onClick={onDelete}
+          className="h-8 w-8 p-0 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
+        >
+          <Trash2 className="w-3.5 h-3.5" />
+        </Button>
+      </div>
+    </motion.div>
   );
 }

@@ -1,31 +1,32 @@
 # Fancy Looks Salon
 
 ## Current State
-Full-stack salon management app with:
-- Staff portal (check-in/check-out, earnings entry)
-- Admin Dashboard (Live Status, Analytics, Monthly Summary, Staff Management, Notifications)
-- Password-based admin login (password: "Fancy0308") with frontend fallback
-- Backend authorization uses AccessControl with #admin/#user permissions
-- `addStaff`, `updateStaff`, `removeStaff` require `#admin` permission
-- `getAllStaff`, `getStaffById`, attendance, earnings, notifications require `#user` permission
-- Anonymous callers have no permissions — this causes "Service temporarily unavailable" / rejection errors when adding staff
+Existing app has a Staff Portal where all staff are listed and any staff profile can be viewed without any authentication. Admin Dashboard has full password protection. Backend has admin-only password for all admin operations. No staff-level password system exists.
 
 ## Requested Changes (Diff)
 
 ### Add
-- Backend: `addStaff`, `updateStaff`, `removeStaff` should accept an `adminPassword: Text` parameter and verify it equals "Fancy0308" before proceeding (instead of AccessControl admin check)
-- Backend: `getAllStaff`, `getStaffById`, `getTodayAttendance`, `getEarningsByStaffAndMonth`, `getRecentNotifications`, `checkIn`, `checkOut`, `addOrUpdateEarningsEntry` should be accessible to anonymous callers (remove #user permission check or make them public query/shared)
-- Backend: `verifyAdminPassword` stays as a public query
+- Backend: `stable var staffPasswords` map (Nat -> Text) to store per-staff passwords
+- Backend: `setStaffPassword(adminPassword, staffId, newPassword)` - Admin only, sets/resets a staff member's portal password
+- Backend: `verifyStaffPassword(staffId, password)` - returns Bool, verifies if given password matches staff's stored password
+- Backend: `hasStaffPassword(staffId)` - returns Bool, checks if a staff has a password set
+- Frontend: Staff Portal now shows all staff list first; clicking a staff card prompts for password before showing their profile
+- Frontend: Password modal/overlay appears when a staff card is clicked - user enters password, on success shows the full profile view
+- Frontend: If staff has no password set, show a message "Password not set. Contact Admin."
+- Frontend: Admin Dashboard > Staff Management tab gets a "Set Password" button per staff card to allow admin to set/reset that staff's portal password
 
 ### Modify
-- Frontend StaffManagementTab: pass `adminPassword = "Fancy0308"` as argument to `addStaff`, `updateStaff`, `removeStaff` calls
-- Remove `useAdminActor` hook usage from StaffManagementTab — just use regular `actor` from `useActor`
+- Staff Portal flow: previously showed profile directly, now requires password verification per staff
+- StaffManagementTab: add Set Password button and modal per staff
+- No existing attendance, earnings, or analytics data is deleted or affected
 
 ### Remove
-- Backend permission checks on read-only and staff-portal endpoints (replace with open access)
-- Backend permission checks on write staff endpoints (replace with password param check)
+- Nothing removed
 
 ## Implementation Plan
-1. Regenerate backend with new function signatures: addStaff/updateStaff/removeStaff take adminPassword param; all read + check-in/out functions are open (no permission check)
-2. Update StaffManagementTab to pass "Fancy0308" as adminPassword argument and remove useAdminActor
-3. Validate and build
+1. Add `stable var staffPasswords = Map.empty<Nat, Text>()` to backend
+2. Add `setStaffPassword`, `verifyStaffPassword`, `hasStaffPassword` public functions to backend
+3. Update `backend.d.ts` with new function signatures
+4. Update StaffPortalPage/StaffSelectionPage: when a staff card is clicked, show password entry modal; on correct password show profile; on wrong password show error
+5. Update StaffManagementTab in Admin Dashboard: add "Set Password" / "Reset Password" button per staff, opens modal to enter new password, calls setStaffPassword
+6. All changes are purely additive - no data deletion

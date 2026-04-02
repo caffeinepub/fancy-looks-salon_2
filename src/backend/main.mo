@@ -84,6 +84,7 @@ actor {
   stable var earningsEntries = Map.empty<Nat, EarningsEntry>();
   stable var notificationEvents = Map.empty<Nat, NotificationEvent>();
   stable var halfDayRecords = Map.empty<Nat, HalfDayRecord>();
+  stable var staffPasswords = Map.empty<Nat, Text>();
 
   stable var nextStaffId = 1;
   stable var nextAttendanceId = 1;
@@ -523,4 +524,25 @@ actor {
   public shared ({ caller }) func saveCallerUserProfile(profile : UserProfile) : async () {
     userProfiles.add(caller, profile);
   };
+  // STAFF PASSWORD MANAGEMENT
+  public shared func setStaffPassword(adminPassword : Text, staffId : Nat, newPassword : Text) : async () {
+    verifyAdminPasswordOrTrap(adminPassword);
+    if (not staffProfiles.containsKey(staffId)) {
+      Runtime.trap("Staff not found");
+    };
+    staffPasswords.add(staffId, newPassword);
+  };
+
+  public query func verifyStaffPassword(staffId : Nat, password : Text) : async Bool {
+    switch (staffPasswords.get(staffId)) {
+      case (null) { false };
+      case (?storedPassword) { storedPassword == password };
+    };
+  };
+
+  public query func hasStaffPassword(staffId : Nat) : async Bool {
+    staffPasswords.containsKey(staffId);
+  };
+
+
 };

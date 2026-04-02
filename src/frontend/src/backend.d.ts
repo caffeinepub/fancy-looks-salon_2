@@ -88,4 +88,7 @@ export interface backendInterface {
     updateCheckOutTime(adminPassword: string, staffId: bigint, date: string, newCheckOutHour: bigint, newCheckOutMinute: bigint): Promise<void>;
     updateStaff(adminPassword: string, id: bigint, name: string, photoUrl: string, shiftStart: string, shiftEnd: string, isPremium: boolean, isActive: boolean): Promise<void>;
     verifyAdminPassword(password: string): Promise<boolean>;
+    setStaffPassword(adminPassword: string, staffId: bigint, newPassword: string): Promise<void>;
+    verifyStaffPassword(staffId: bigint, password: string): Promise<boolean>;
+    hasStaffPassword(staffId: bigint): Promise<boolean>;
 }
