@@ -50,14 +50,14 @@ export default function StaffPasswordLoginPage({
   const loginMutation = useMutation({
     mutationFn: async () => {
       if (!actor) throw new Error("Not connected");
-      // findStaffByPassword returns bigint | null (already unwrapped by Backend class)
+      // findStaffByPassword returns bigint | null
       const staffId = await actor.findStaffByPassword(password);
-      // Explicit null check (bigint 0 would be falsy but valid)
+      // null means no staff found with this password
       if (staffId === null || staffId === undefined) {
         return null;
       }
       const staff = await actor.getStaffById(staffId);
-      return staff;
+      return staff ?? null;
     },
     onSuccess: (staff: StaffProfile | null) => {
       if (staff) {
@@ -77,8 +77,8 @@ export default function StaffPasswordLoginPage({
       if (
         lower.includes("stopped") ||
         lower.includes("unavailable") ||
-        lower.includes("fetch") ||
-        lower.includes("network")
+        lower.includes("503") ||
+        lower.includes("canister")
       ) {
         setErrorMsg("সার্ভার সাময়িকভাবে বন্ধ। একটু পরে আবার চেষ্টা করুন।");
       } else {

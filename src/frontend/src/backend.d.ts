@@ -68,7 +68,7 @@ export interface backendInterface {
     checkIn(staffId: bigint): Promise<bigint>;
     checkOut(staffId: bigint): Promise<bigint>;
     cleanOldNotifications(adminPassword: string): Promise<bigint>;
-    findStaffByPassword(password: string): Promise<[] | [bigint]>;
+    findStaffByPassword(password: string): Promise<bigint | null>;
     getAllAttendanceRecords(): Promise<Array<AttendanceRecord>>;
     getAllStaff(): Promise<Array<StaffProfile>>;
     getAttendanceByDate(date: string): Promise<Array<AttendanceRecord>>;
@@ -81,16 +81,16 @@ export interface backendInterface {
     getStaffById(id: bigint): Promise<StaffProfile>;
     getTodayAttendance(): Promise<Array<AttendanceRecord>>;
     getUserProfile(user: Principal): Promise<UserProfile | null>;
+    hasStaffPassword(staffId: bigint): Promise<boolean>;
     isCallerAdmin(): Promise<boolean>;
     markHalfDay(adminPassword: string, staffId: bigint, date: string): Promise<bigint>;
     removeHalfDay(adminPassword: string, staffId: bigint, date: string): Promise<void>;
     removeStaff(adminPassword: string, id: bigint): Promise<void>;
     saveCallerUserProfile(profile: UserProfile): Promise<void>;
+    setStaffPassword(adminPassword: string, staffId: bigint, newPassword: string): Promise<void>;
     updateCheckInTime(adminPassword: string, staffId: bigint, date: string, newCheckInHour: bigint, newCheckInMinute: bigint): Promise<void>;
     updateCheckOutTime(adminPassword: string, staffId: bigint, date: string, newCheckOutHour: bigint, newCheckOutMinute: bigint): Promise<void>;
     updateStaff(adminPassword: string, id: bigint, name: string, photoUrl: string, shiftStart: string, shiftEnd: string, isPremium: boolean, isActive: boolean): Promise<void>;
     verifyAdminPassword(password: string): Promise<boolean>;
-    setStaffPassword(adminPassword: string, staffId: bigint, newPassword: string): Promise<void>;
     verifyStaffPassword(staffId: bigint, password: string): Promise<boolean>;
-    hasStaffPassword(staffId: bigint): Promise<boolean>;
 }
