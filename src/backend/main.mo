@@ -167,7 +167,7 @@ actor {
     } else { 0 };
   };
 
-  // STAFF MANAGEMENT - Password protected only
+  // STAFF MANAGEMENT - Password protected only (no IC identity check)
   public shared func addStaff(
     adminPassword : Text,
     name : Text,
@@ -412,6 +412,11 @@ actor {
     attendanceRecords.values().toArray().filter(func(record) { record.date == date });
   };
 
+  // Get ALL attendance records (no auth needed)
+  public query func getAllAttendanceRecords() : async [AttendanceRecord] {
+    attendanceRecords.values().toArray();
+  };
+
   // HALF DAY RECORDS - Password protected
   public shared func markHalfDay(adminPassword : Text, staffId : Nat, date : Text) : async Nat {
     verifyAdminPasswordOrTrap(adminPassword);
@@ -524,7 +529,8 @@ actor {
   public shared ({ caller }) func saveCallerUserProfile(profile : UserProfile) : async () {
     userProfiles.add(caller, profile);
   };
-  // STAFF PASSWORD MANAGEMENT
+
+  // STAFF PASSWORD MANAGEMENT - Password protected only (no IC identity check)
   public shared func setStaffPassword(adminPassword : Text, staffId : Nat, newPassword : Text) : async () {
     verifyAdminPasswordOrTrap(adminPassword);
     if (not staffProfiles.containsKey(staffId)) {
@@ -543,8 +549,6 @@ actor {
   public query func hasStaffPassword(staffId : Nat) : async Bool {
     staffPasswords.containsKey(staffId);
   };
-
-
 
   public query func findStaffByPassword(password : Text) : async ?Nat {
     for ((staffId, storedPassword) in staffPasswords.entries()) {

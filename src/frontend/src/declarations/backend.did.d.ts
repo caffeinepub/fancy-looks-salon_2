@@ -71,6 +71,7 @@ export interface _SERVICE {
   'checkOut' : ActorMethod<[bigint], bigint>,
   'cleanOldNotifications' : ActorMethod<[string], bigint>,
   'findStaffByPassword' : ActorMethod<[string], [] | [bigint]>,
+  'getAllAttendanceRecords' : ActorMethod<[], Array<AttendanceRecord>>,
   'getAllStaff' : ActorMethod<[], Array<StaffProfile>>,
   'getAttendanceByDate' : ActorMethod<[string], Array<AttendanceRecord>>,
   'getCallerUserProfile' : ActorMethod<[], [] | [UserProfile]>,
@@ -85,6 +86,7 @@ export interface _SERVICE {
   'getStaffById' : ActorMethod<[bigint], StaffProfile>,
   'getTodayAttendance' : ActorMethod<[], Array<AttendanceRecord>>,
   'getUserProfile' : ActorMethod<[Principal], [] | [UserProfile]>,
+  'hasStaffPassword' : ActorMethod<[bigint], boolean>,
   'isCallerAdmin' : ActorMethod<[], boolean>,
   'markHalfDay' : ActorMethod<[string, bigint, string], bigint>,
   'removeHalfDay' : ActorMethod<[string, bigint, string], undefined>,
@@ -105,7 +107,6 @@ export interface _SERVICE {
   >,
   'verifyAdminPassword' : ActorMethod<[string], boolean>,
   'verifyStaffPassword' : ActorMethod<[bigint, string], boolean>,
-  'hasStaffPassword' : ActorMethod<[bigint], boolean>,
 }
 export declare const idlService: IDL.ServiceClass;
 export declare const idlInitArgs: IDL.Type[];

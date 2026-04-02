@@ -1,32 +1,43 @@
 # Fancy Looks Salon
 
 ## Current State
-Staff Portal currently shows a list of all staff cards. When a staff card is clicked, it goes to a dedicated login page (StaffLoginPage) where the staff must enter their password. If 'Remember Me' was checked, the staff is auto-logged in by ID stored in localStorage.
+
+- Staff Portal opens with password-only login (StaffPasswordLoginPage)
+- App.tsx has view states: home, staff-password-login, staff-portal, admin-login, admin-dashboard
+- HomePage shows 2 buttons: Staff Portal and Admin Login
+- Backend has: getAllStaff, getAttendanceByDate, getTodayAttendance, getEarningsByStaffAndMonth, but no getAllAttendanceRecords
+- Staff add is failing (Server temporarily unavailable)
+- No "Staff Attendance" tab exists anywhere
 
 ## Requested Changes (Diff)
 
 ### Add
-- A new `StaffPasswordLoginPage` component that shows ONLY a password input box (no staff list, no staff cards visible)
-- Backend support for a new query: `findStaffByPassword(password: Text) -> async ?Nat` -- returns staffId if password matches any staff, else null
-- The new flow: Staff Portal opens → password box shown → staff types password → if valid, that staff's profile opens automatically
+- New top-level navigation with 3 tabs on the main homepage: "Staff Portal", "Staff Attendance", "Admin Login"
+- New `StaffAttendanceTab` component: shows all staff attendance data, daily (today) and monthly (current month) views, with check-in/check-out times for each staff per day
+- New backend query function `getAllAttendanceRecords()` returning all AttendanceRecord entries (no auth needed, public data)
+- backend.d.ts updated to include `getAllAttendanceRecords(): Promise<Array<AttendanceRecord>>`
 
 ### Modify
-- `App.tsx`: Change Staff Portal entry view from `staff-selection` to a new `staff-password-login` view
-- The `staff-selection` view/component is no longer the entry point for Staff Portal
-- After successful password login, go directly to `staff-portal` for that staff
-- 'Remember Me' logic: if remembered staff ID exists in localStorage, skip password entry and go directly to that staff's portal
-- `StaffSelectionPage` is no longer shown on Staff Portal entry (it can remain for Admin or be removed)
+- HomePage: instead of two separate cards (Staff Portal, Admin Login), show a 3-tab navigation interface at the top. The main area changes based on selected tab.
+  - Tab 1: "Staff Portal" → password login form (existing StaffPasswordLoginPage flow)
+  - Tab 2: "Staff Attendance" → new attendance summary view
+  - Tab 3: "Admin Login" → existing admin login
+- App.tsx: add new view state "staff-attendance" if needed, or integrate tabs within HomePage component
+- Backend main.mo: add `getAllAttendanceRecords` public query function
 
 ### Remove
-- Staff Portal entry no longer shows the staff list/selection grid
+- Nothing removed, no old data deleted
 
 ## Implementation Plan
-1. Add `findStaffByPassword` query function to `src/backend/main.mo` -- iterates over staffPasswords map and returns the staffId whose password matches
-2. Update `src/frontend/src/declarations/backend.did.js` and `backend.did.d.ts` to include `findStaffByPassword`
-3. Update `src/frontend/src/backend.d.ts` to include `findStaffByPassword` in backendInterface
-4. Create `src/frontend/src/components/StaffPasswordLoginPage.tsx` -- shows salon branding, a single password input, submit button, error handling, and 'Remember Me' checkbox
-5. Update `src/frontend/src/App.tsx`:
-   - Add new view state `staff-password-login`
-   - On 'Staff Portal' button click from HomePage, go to `staff-password-login`
-   - On successful password match, set selectedStaff and go to `staff-portal`
-   - Check localStorage for remembered staff on entry; if found, skip to portal directly
+
+1. Add `getAllAttendanceRecords()` to backend main.mo
+2. Update backend.d.ts with new function signature
+3. Refactor HomePage to show 3-tab layout (Staff Portal | Staff Attendance | Admin Login)
+4. Create StaffAttendanceTab component:
+   - Daily view: today's check-in/check-out for all staff (shows absent if no record)
+   - Monthly view: month selector, then list all days with each staff's check-in/check-out
+   - Each staff shows: name, photo, check-in time, check-out time, status (Present/Absent/Checked In)
+5. Staff Portal tab shows the existing StaffPasswordLoginPage inline or navigates to it
+6. Admin Login tab shows existing AdminLoginPage inline or navigates to it
+7. Keep all existing data, no deletions
+8. Staff add fix: ensure backend is redeployed fresh to restore connectivity

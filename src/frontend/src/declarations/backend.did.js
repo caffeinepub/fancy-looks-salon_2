@@ -13,16 +13,6 @@ export const UserRole = IDL.Variant({
   'user' : IDL.Null,
   'guest' : IDL.Null,
 });
-export const StaffProfile = IDL.Record({
-  'id' : IDL.Nat,
-  'isPremium' : IDL.Bool,
-  'name' : IDL.Text,
-  'createdAt' : IDL.Int,
-  'photoUrl' : IDL.Text,
-  'isActive' : IDL.Bool,
-  'shiftStart' : IDL.Text,
-  'shiftEnd' : IDL.Text,
-});
 export const AttendanceRecord = IDL.Record({
   'id' : IDL.Nat,
   'staffId' : IDL.Nat,
@@ -32,6 +22,16 @@ export const AttendanceRecord = IDL.Record({
   'checkInTime' : IDL.Opt(IDL.Int),
   'checkOutTime' : IDL.Opt(IDL.Int),
   'overtimeMinutes' : IDL.Nat,
+});
+export const StaffProfile = IDL.Record({
+  'id' : IDL.Nat,
+  'isPremium' : IDL.Bool,
+  'name' : IDL.Text,
+  'createdAt' : IDL.Int,
+  'photoUrl' : IDL.Text,
+  'isActive' : IDL.Bool,
+  'shiftStart' : IDL.Text,
+  'shiftEnd' : IDL.Text,
 });
 export const UserProfile = IDL.Record({ 'name' : IDL.Text, 'role' : IDL.Text });
 export const EarningsEntry = IDL.Record({
@@ -73,6 +73,11 @@ export const idlService = IDL.Service({
   'checkOut' : IDL.Func([IDL.Nat], [IDL.Int], []),
   'cleanOldNotifications' : IDL.Func([IDL.Text], [IDL.Nat], []),
   'findStaffByPassword' : IDL.Func([IDL.Text], [IDL.Opt(IDL.Nat)], ['query']),
+  'getAllAttendanceRecords' : IDL.Func(
+      [],
+      [IDL.Vec(AttendanceRecord)],
+      ['query'],
+    ),
   'getAllStaff' : IDL.Func([], [IDL.Vec(StaffProfile)], ['query']),
   'getAttendanceByDate' : IDL.Func(
       [IDL.Text],
@@ -108,6 +113,7 @@ export const idlService = IDL.Service({
       [IDL.Opt(UserProfile)],
       ['query'],
     ),
+  'hasStaffPassword' : IDL.Func([IDL.Nat], [IDL.Bool], ['query']),
   'isCallerAdmin' : IDL.Func([], [IDL.Bool], ['query']),
   'markHalfDay' : IDL.Func([IDL.Text, IDL.Nat, IDL.Text], [IDL.Nat], []),
   'removeHalfDay' : IDL.Func([IDL.Text, IDL.Nat, IDL.Text], [], []),
@@ -140,7 +146,6 @@ export const idlService = IDL.Service({
     ),
   'verifyAdminPassword' : IDL.Func([IDL.Text], [IDL.Bool], ['query']),
   'verifyStaffPassword' : IDL.Func([IDL.Nat, IDL.Text], [IDL.Bool], ['query']),
-  'hasStaffPassword' : IDL.Func([IDL.Nat], [IDL.Bool], ['query']),
 });
 
 export const idlInitArgs = [];
@@ -151,16 +156,6 @@ export const idlFactory = ({ IDL }) => {
     'user' : IDL.Null,
     'guest' : IDL.Null,
   });
-  const StaffProfile = IDL.Record({
-    'id' : IDL.Nat,
-    'isPremium' : IDL.Bool,
-    'name' : IDL.Text,
-    'createdAt' : IDL.Int,
-    'photoUrl' : IDL.Text,
-    'isActive' : IDL.Bool,
-    'shiftStart' : IDL.Text,
-    'shiftEnd' : IDL.Text,
-  });
   const AttendanceRecord = IDL.Record({
     'id' : IDL.Nat,
     'staffId' : IDL.Nat,
@@ -170,6 +165,16 @@ export const idlFactory = ({ IDL }) => {
     'checkInTime' : IDL.Opt(IDL.Int),
     'checkOutTime' : IDL.Opt(IDL.Int),
     'overtimeMinutes' : IDL.Nat,
+  });
+  const StaffProfile = IDL.Record({
+    'id' : IDL.Nat,
+    'isPremium' : IDL.Bool,
+    'name' : IDL.Text,
+    'createdAt' : IDL.Int,
+    'photoUrl' : IDL.Text,
+    'isActive' : IDL.Bool,
+    'shiftStart' : IDL.Text,
+    'shiftEnd' : IDL.Text,
   });
   const UserProfile = IDL.Record({ 'name' : IDL.Text, 'role' : IDL.Text });
   const EarningsEntry = IDL.Record({
@@ -211,6 +216,11 @@ export const idlFactory = ({ IDL }) => {
     'checkOut' : IDL.Func([IDL.Nat], [IDL.Int], []),
     'cleanOldNotifications' : IDL.Func([IDL.Text], [IDL.Nat], []),
     'findStaffByPassword' : IDL.Func([IDL.Text], [IDL.Opt(IDL.Nat)], ['query']),
+    'getAllAttendanceRecords' : IDL.Func(
+        [],
+        [IDL.Vec(AttendanceRecord)],
+        ['query'],
+      ),
     'getAllStaff' : IDL.Func([], [IDL.Vec(StaffProfile)], ['query']),
     'getAttendanceByDate' : IDL.Func(
         [IDL.Text],
@@ -246,6 +256,7 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Opt(UserProfile)],
         ['query'],
       ),
+    'hasStaffPassword' : IDL.Func([IDL.Nat], [IDL.Bool], ['query']),
     'isCallerAdmin' : IDL.Func([], [IDL.Bool], ['query']),
     'markHalfDay' : IDL.Func([IDL.Text, IDL.Nat, IDL.Text], [IDL.Nat], []),
     'removeHalfDay' : IDL.Func([IDL.Text, IDL.Nat, IDL.Text], [], []),
@@ -277,8 +288,11 @@ export const idlFactory = ({ IDL }) => {
         [],
       ),
     'verifyAdminPassword' : IDL.Func([IDL.Text], [IDL.Bool], ['query']),
-    'verifyStaffPassword' : IDL.Func([IDL.Nat, IDL.Text], [IDL.Bool], ['query']),
-    'hasStaffPassword' : IDL.Func([IDL.Nat], [IDL.Bool], ['query']),
+    'verifyStaffPassword' : IDL.Func(
+        [IDL.Nat, IDL.Text],
+        [IDL.Bool],
+        ['query'],
+      ),
   });
 };
 

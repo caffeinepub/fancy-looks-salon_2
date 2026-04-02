@@ -1,6 +1,4 @@
 import Map "mo:core/Map";
-import Nat "mo:core/Nat";
-import Int "mo:core/Int";
 import Principal "mo:core/Principal";
 
 module {
@@ -51,41 +49,32 @@ module {
     message : Text;
   };
 
-  type OldActor = {
-    userProfiles : Map.Map<Principal, UserProfile>;
-    staffProfiles : Map.Map<Nat, StaffProfile>;
-    attendanceRecords : Map.Map<Nat, AttendanceRecord>;
-    earningsEntries : Map.Map<Nat, EarningsEntry>;
-    notificationEvents : Map.Map<Nat, NotificationEvent>;
-    nextStaffId : Nat;
-    nextAttendanceId : Nat;
-    nextEarningsId : Nat;
-    nextNotificationId : Nat;
+  type HalfDayRecord = {
+    id : Nat;
+    staffId : Nat;
+    date : Text;
+    markedAt : Int;
   };
 
-  type NewActor = {
-    userProfiles : Map.Map<Principal, UserProfile>;
+  type OldActor = {
+    userProfiles : Map.Map<Principal.Principal, UserProfile>;
     staffProfiles : Map.Map<Nat, StaffProfile>;
     attendanceRecords : Map.Map<Nat, AttendanceRecord>;
     earningsEntries : Map.Map<Nat, EarningsEntry>;
     notificationEvents : Map.Map<Nat, NotificationEvent>;
+    halfDayRecords : Map.Map<Nat, HalfDayRecord>;
+    staffPasswords : Map.Map<Nat, Text>;
     nextStaffId : Nat;
     nextAttendanceId : Nat;
     nextEarningsId : Nat;
     nextNotificationId : Nat;
+    nextHalfDayId : Nat;
   };
+
+  type NewActor = OldActor;
 
   public func run(old : OldActor) : NewActor {
-    {
-      userProfiles = old.userProfiles;
-      staffProfiles = old.staffProfiles;
-      attendanceRecords = old.attendanceRecords;
-      earningsEntries = old.earningsEntries;
-      notificationEvents = old.notificationEvents;
-      nextStaffId = old.nextStaffId;
-      nextAttendanceId = old.nextAttendanceId;
-      nextEarningsId = old.nextEarningsId;
-      nextNotificationId = old.nextNotificationId;
-    };
+    // No changes to persistent state required, pass through
+    old;
   };
 };
