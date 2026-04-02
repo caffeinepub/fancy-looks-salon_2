@@ -4,7 +4,7 @@ import { useMutation, useQuery } from "@tanstack/react-query";
 import { ArrowLeft, Eye, EyeOff, Lock, Scissors } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
 import { useState } from "react";
-import type { StaffProfile, backendInterface } from "../backend.d";
+import type { StaffProfile } from "../backend.d";
 import { useActor } from "../hooks/useActor";
 
 const REMEMBER_KEY = "fls_remembered_staff";
@@ -32,9 +32,7 @@ export default function StaffPasswordLoginPage({
     queryFn: async () => {
       if (!actor || !rememberedId) return null;
       try {
-        const staff = await (actor as unknown as backendInterface).getStaffById(
-          BigInt(rememberedId),
-        );
+        const staff = await actor.getStaffById(BigInt(rememberedId));
         if (staff) {
           onSuccess(staff);
         }
@@ -52,15 +50,10 @@ export default function StaffPasswordLoginPage({
   const loginMutation = useMutation({
     mutationFn: async () => {
       if (!actor) throw new Error("Not connected");
-      const result = await (
-        actor as unknown as backendInterface
-      ).findStaffByPassword(password);
-      // ICP optional: [] | [bigint]
-      if (result.length > 0) {
-        const staffId = result[0];
-        const staff = await (actor as unknown as backendInterface).getStaffById(
-          staffId as bigint,
-        );
+      // findStaffByPassword returns bigint | null (already unwrapped by Backend class)
+      const staffId = await actor.findStaffByPassword(password);
+      if (staffId !== null && staffId !== undefined) {
+        const staff = await actor.getStaffById(staffId as bigint);
         return staff;
       }
       return null;
