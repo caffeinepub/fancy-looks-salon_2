@@ -7,7 +7,7 @@ import {
   TrendingUp,
   UserCircle2,
 } from "lucide-react";
-import { motion } from "motion/react";
+import { AnimatePresence, motion } from "motion/react";
 import { useState } from "react";
 import type {
   AttendanceRecord,
@@ -30,6 +30,14 @@ function epochDaysToDisplay(dateStr: string): string {
   if (Number.isNaN(n)) return dateStr;
   const d = new Date(n * 24 * 60 * 60 * 1000);
   return `${d.getDate()}/${d.getMonth() + 1}`;
+}
+
+/** Convert epoch-days string to full DD/MM/YYYY format */
+function epochDaysToFullDate(dateStr: string): string {
+  const n = Number(dateStr);
+  if (Number.isNaN(n)) return dateStr;
+  const d = new Date(n * 24 * 60 * 60 * 1000);
+  return `${String(d.getDate()).padStart(2, "0")}/${String(d.getMonth() + 1).padStart(2, "0")}/${d.getFullYear()}`;
 }
 
 /** Get all calendar days in the given year/month, up to today */
@@ -101,7 +109,6 @@ function StaffMonthlySummary({
   index: number;
 }) {
   const { actor, isFetching } = useActor();
-
   const { data: earnings, isLoading: isLoadingEarnings } = useQuery<
     EarningsEntry[]
   >({
@@ -174,6 +181,34 @@ function StaffMonthlySummary({
   const halfDayCount = halfDayRecords.filter(
     (r) => String(r.staffId) === String(staff.id),
   ).length;
+
+  // Detail records for late and overtime
+  const lateRecords = att
+    .filter(
+      (r) =>
+        r.checkInTime != null &&
+        computeLateInfo(r.checkInTime, staff.shiftStart).isLate,
+    )
+    .map((r) => ({
+      date: epochDaysToFullDate(r.date),
+      minutes: computeLateInfo(r.checkInTime!, staff.shiftStart).lateMinutes,
+    }))
+    .sort((a, b) => a.date.localeCompare(b.date));
+
+  const overtimeRecords = att
+    .filter(
+      (r) =>
+        r.checkOutTime != null &&
+        computeOvertimeInfo(r.checkOutTime, staff.shiftEnd).overtimeMinutes > 0,
+    )
+    .map((r) => ({
+      date: epochDaysToFullDate(r.date),
+      minutes: computeOvertimeInfo(r.checkOutTime!, staff.shiftEnd)
+        .overtimeMinutes,
+    }))
+    .sort((a, b) => a.date.localeCompare(b.date));
+
+  const hasDetails = lateRecords.length > 0 || overtimeRecords.length > 0;
 
   return (
     <motion.div
@@ -342,6 +377,87 @@ function StaffMonthlySummary({
               </span>
             ))}
           </div>
+        </div>
+      )}
+
+      {/* Date-wise Late & Overtime detail - always visible */}
+      {!isLoading && hasDetails && (
+        <div className="mt-3 pt-3 border-t border-border space-y-4">
+          {/* Late days */}
+          {lateRecords.length > 0 && (
+            <div>
+              <div className="flex items-center gap-1.5 mb-2">
+                <AlertTriangle
+                  className="w-3 h-3"
+                  style={{ color: "oklch(0.65 0.22 22)" }}
+                />
+                <span
+                  className="text-[11px] font-semibold uppercase tracking-wider"
+                  style={{ color: "oklch(0.65 0.22 22 / 0.8)" }}
+                >
+                  দেরিতে আসার দিনগুলি
+                </span>
+              </div>
+              <div className="flex flex-wrap gap-1.5">
+                {lateRecords.map((rec) => (
+                  <span
+                    key={rec.date}
+                    className="text-[11px] px-2.5 py-1 rounded-full flex items-center gap-1"
+                    style={{
+                      background: "oklch(0.60 0.22 22 / 0.10)",
+                      border: "1px solid oklch(0.65 0.22 22 / 0.30)",
+                      color: "oklch(0.65 0.22 22)",
+                    }}
+                  >
+                    <span>📅</span>
+                    <span>{rec.date}</span>
+                    <span className="opacity-60">—</span>
+                    <span className="font-semibold">
+                      Late +{formatMinutes(rec.minutes)}
+                    </span>
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Overtime days */}
+          {overtimeRecords.length > 0 && (
+            <div>
+              <div className="flex items-center gap-1.5 mb-2">
+                <TrendingUp
+                  className="w-3 h-3"
+                  style={{ color: "oklch(0.76 0.15 85)" }}
+                />
+                <span
+                  className="text-[11px] font-semibold uppercase tracking-wider"
+                  style={{ color: "oklch(0.76 0.15 85 / 0.8)" }}
+                >
+                  অতিরিক্ত কাজের দিনগুলি
+                </span>
+              </div>
+              <div className="flex flex-wrap gap-1.5">
+                {overtimeRecords.map((rec) => (
+                  <span
+                    key={rec.date}
+                    className="text-[11px] px-2.5 py-1 rounded-full flex items-center gap-1"
+                    style={{
+                      background: "oklch(0.76 0.15 85 / 0.08)",
+                      border: "1px solid oklch(0.76 0.15 85 / 0.30)",
+                      color: "oklch(0.76 0.15 85)",
+                    }}
+                  >
+                    <span>📅</span>
+                    <span>{rec.date}</span>
+                    <span className="opacity-60">—</span>
+                    <span className="font-semibold">
+                      Overtime +{formatMinutes(rec.minutes)}
+                    </span>
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       )}
     </motion.div>
