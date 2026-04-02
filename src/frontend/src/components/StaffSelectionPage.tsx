@@ -1,271 +1,12 @@
-import { Button } from "@/components/ui/button";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { useMutation, useQuery } from "@tanstack/react-query";
-import {
-  ArrowLeft,
-  Crown,
-  Eye,
-  EyeOff,
-  Lock,
-  Scissors,
-  UserCircle2,
-} from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
+import { ArrowLeft, Crown, Scissors, UserCircle2 } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
-import { useState } from "react";
-import type { StaffProfile, backendInterface } from "../backend.d";
+import type { StaffProfile } from "../backend.d";
 import { useActor } from "../hooks/useActor";
 
 interface StaffSelectionPageProps {
   onBack: () => void;
   onSelectStaff: (staff: StaffProfile) => void;
-}
-
-// Password modal dialog for staff profile access
-function StaffPasswordDialog({
-  staff,
-  open,
-  onClose,
-  onSuccess,
-}: {
-  staff: StaffProfile | null;
-  open: boolean;
-  onClose: () => void;
-  onSuccess: (staff: StaffProfile) => void;
-}) {
-  const { actor } = useActor();
-  const [password, setPassword] = useState("");
-  const [showPassword, setShowPassword] = useState(false);
-  const [errorMsg, setErrorMsg] = useState("");
-
-  // Check if password is set for this staff
-  const { data: hasPassword, isLoading: checkingPassword } = useQuery({
-    queryKey: ["hasStaffPassword", staff?.id ? String(staff.id) : null],
-    queryFn: async () => {
-      if (!actor || !staff) return false;
-      return (actor as unknown as backendInterface).hasStaffPassword(staff.id);
-    },
-    enabled: !!actor && !!staff && open,
-  });
-
-  const verifyMutation = useMutation({
-    mutationFn: async () => {
-      if (!actor || !staff) throw new Error("Not connected");
-      return (actor as unknown as backendInterface).verifyStaffPassword(
-        staff.id,
-        password,
-      );
-    },
-    onSuccess: (isValid: boolean) => {
-      if (isValid) {
-        if (staff) onSuccess(staff);
-      } else {
-        setErrorMsg("ভুল password। আবার চেষ্টা করুন।");
-      }
-    },
-    onError: () => {
-      setErrorMsg("যাচাই করতে সমস্যা হয়েছে। পুনরায় চেষ্টা করুন।");
-    },
-  });
-
-  const handleClose = () => {
-    setPassword("");
-    setErrorMsg("");
-    setShowPassword(false);
-    onClose();
-  };
-
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    setErrorMsg("");
-    if (!password.trim()) {
-      setErrorMsg("Password দিন।");
-      return;
-    }
-    verifyMutation.mutate();
-  };
-
-  return (
-    <Dialog open={open} onOpenChange={(v) => !v && handleClose()}>
-      <DialogContent
-        data-ocid="staff_password.dialog"
-        className="max-w-sm font-body"
-        style={{
-          background: "oklch(0.13 0.006 60)",
-          border: "1px solid oklch(0.76 0.15 85 / 0.25)",
-        }}
-      >
-        <DialogHeader>
-          <DialogTitle className="font-display text-xl text-foreground sr-only">
-            Staff Password
-          </DialogTitle>
-        </DialogHeader>
-
-        {/* Staff info */}
-        <div className="flex flex-col items-center gap-3 pt-2 pb-2">
-          <div
-            className="w-20 h-20 rounded-full overflow-hidden"
-            style={{
-              border: "2px solid oklch(0.76 0.15 85 / 0.4)",
-              boxShadow: "0 0 20px oklch(0.76 0.15 85 / 0.15)",
-            }}
-          >
-            {staff?.photoUrl ? (
-              <img
-                src={staff.photoUrl}
-                alt={staff.name}
-                className="w-full h-full object-cover"
-                onError={(e) => {
-                  const img = e.currentTarget as HTMLImageElement;
-                  img.src = `https://i.pravatar.cc/150?img=${(Number(staff.id) % 70) + 1}`;
-                }}
-              />
-            ) : (
-              <div
-                className="w-full h-full flex items-center justify-center"
-                style={{ background: "oklch(0.20 0.012 80)" }}
-              >
-                <UserCircle2 className="w-10 h-10 text-gold opacity-60" />
-              </div>
-            )}
-          </div>
-          <div className="text-center">
-            <p className="font-display font-bold text-lg text-foreground">
-              {staff?.name}
-            </p>
-            <p className="text-xs text-muted-foreground mt-0.5">
-              {staff?.shiftStart} – {staff?.shiftEnd}
-            </p>
-          </div>
-        </div>
-
-        {/* Password area */}
-        {checkingPassword ? (
-          <div
-            data-ocid="staff_password.loading_state"
-            className="flex items-center justify-center py-6"
-          >
-            <div className="gold-spinner" />
-          </div>
-        ) : hasPassword === false ? (
-          // No password set
-          <motion.div
-            data-ocid="staff_password.error_state"
-            initial={{ opacity: 0, y: 6 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="rounded-lg p-4 flex items-start gap-3 mb-2"
-            style={{
-              background: "oklch(0.60 0.15 60 / 0.12)",
-              border: "1px solid oklch(0.60 0.15 60 / 0.35)",
-            }}
-          >
-            <Lock className="w-4 h-4 mt-0.5 flex-shrink-0 text-muted-foreground" />
-            <div>
-              <p className="text-sm text-foreground font-medium">
-                Password সেট করা হয়নি
-              </p>
-              <p className="text-xs text-muted-foreground mt-0.5">
-                Admin-এর সাথে যোগাযোগ করুন।
-              </p>
-            </div>
-          </motion.div>
-        ) : (
-          // Password form
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div className="space-y-1.5">
-              <Label className="text-xs text-muted-foreground uppercase tracking-widest">
-                Password
-              </Label>
-              <div className="relative">
-                <Input
-                  data-ocid="staff_password.input"
-                  type={showPassword ? "text" : "password"}
-                  value={password}
-                  onChange={(e) => {
-                    setPassword(e.target.value);
-                    setErrorMsg("");
-                  }}
-                  placeholder="আপনার password দিন"
-                  className="bg-input border-border text-foreground pr-10"
-                  autoFocus
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowPassword((p) => !p)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-gold transition-colors"
-                  tabIndex={-1}
-                >
-                  {showPassword ? (
-                    <EyeOff className="w-4 h-4" />
-                  ) : (
-                    <Eye className="w-4 h-4" />
-                  )}
-                </button>
-              </div>
-              <AnimatePresence>
-                {errorMsg && (
-                  <motion.p
-                    data-ocid="staff_password.error_state"
-                    initial={{ opacity: 0, y: -4 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, y: -4 }}
-                    className="text-xs mt-1"
-                    style={{ color: "oklch(0.65 0.22 22)" }}
-                  >
-                    {errorMsg}
-                  </motion.p>
-                )}
-              </AnimatePresence>
-            </div>
-
-            <div className="flex gap-2 pt-1">
-              <Button
-                data-ocid="staff_password.cancel_button"
-                type="button"
-                variant="ghost"
-                onClick={handleClose}
-                className="flex-1 font-body text-muted-foreground hover:text-foreground"
-              >
-                বাতিল
-              </Button>
-              <Button
-                data-ocid="staff_password.submit_button"
-                type="submit"
-                disabled={verifyMutation.isPending}
-                className="flex-1 font-body font-semibold"
-                style={{
-                  background: "oklch(0.76 0.15 85)",
-                  color: "oklch(0.08 0 0)",
-                  border: "none",
-                }}
-              >
-                {verifyMutation.isPending ? (
-                  <div className="flex items-center gap-2">
-                    <div
-                      className="gold-spinner w-4 h-4"
-                      style={{ borderTopColor: "black" }}
-                    />
-                    যাচাই হচ্ছে…
-                  </div>
-                ) : (
-                  <div className="flex items-center gap-2">
-                    <Lock className="w-4 h-4" />
-                    প্রবেশ করুন
-                  </div>
-                )}
-              </Button>
-            </div>
-          </form>
-        )}
-      </DialogContent>
-    </Dialog>
-  );
 }
 
 function StaffCard({
@@ -308,14 +49,6 @@ function StaffCard({
         className="relative rounded-xl p-5 flex flex-col items-center gap-4 transition-all duration-300"
         style={{ background: "oklch(0.14 0.006 60)" }}
       >
-        {/* Lock indicator */}
-        <div className="absolute top-3 right-3">
-          <Lock
-            className="w-3 h-3 opacity-40 group-hover:opacity-70 transition-opacity"
-            style={{ color: "oklch(0.76 0.15 85)" }}
-          />
-        </div>
-
         {/* Photo */}
         <div className="relative">
           <div
@@ -389,8 +122,6 @@ export default function StaffSelectionPage({
   onSelectStaff,
 }: StaffSelectionPageProps) {
   const { actor, isFetching } = useActor();
-  const [selectedStaff, setSelectedStaff] = useState<StaffProfile | null>(null);
-  const [passwordDialogOpen, setPasswordDialogOpen] = useState(false);
 
   const {
     data: staffList,
@@ -408,22 +139,6 @@ export default function StaffSelectionPage({
   });
 
   const activeStaff = staffList?.filter((s) => s.isActive) ?? [];
-
-  const handleStaffClick = (staff: StaffProfile) => {
-    setSelectedStaff(staff);
-    setPasswordDialogOpen(true);
-  };
-
-  const handlePasswordSuccess = (staff: StaffProfile) => {
-    setPasswordDialogOpen(false);
-    setSelectedStaff(null);
-    onSelectStaff(staff);
-  };
-
-  const handlePasswordClose = () => {
-    setPasswordDialogOpen(false);
-    setSelectedStaff(null);
-  };
 
   return (
     <div className="min-h-screen bg-background relative overflow-hidden">
@@ -469,7 +184,7 @@ export default function StaffSelectionPage({
             Select <span className="gold-text-gradient">Your Profile</span>
           </h1>
           <p className="text-muted-foreground text-sm mt-2">
-            Choose your name to access the staff portal
+            Choose your name to login to the staff portal
           </p>
         </motion.div>
 
@@ -524,30 +239,24 @@ export default function StaffSelectionPage({
             </p>
           </motion.div>
         ) : null}
-        {!isLoading && !error && activeStaff.length > 0 && (
-          <motion.div
-            data-ocid="staff_select.list"
-            className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4"
-          >
-            {activeStaff.map((staff, index) => (
-              <StaffCard
-                key={String(staff.id)}
-                staff={staff}
-                index={index}
-                onSelect={() => handleStaffClick(staff)}
-              />
-            ))}
-          </motion.div>
-        )}
+        <AnimatePresence>
+          {!isLoading && !error && activeStaff.length > 0 && (
+            <motion.div
+              data-ocid="staff_select.list"
+              className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4"
+            >
+              {activeStaff.map((staff, index) => (
+                <StaffCard
+                  key={String(staff.id)}
+                  staff={staff}
+                  index={index}
+                  onSelect={() => onSelectStaff(staff)}
+                />
+              ))}
+            </motion.div>
+          )}
+        </AnimatePresence>
       </main>
-
-      {/* Password Dialog */}
-      <StaffPasswordDialog
-        staff={selectedStaff}
-        open={passwordDialogOpen}
-        onClose={handlePasswordClose}
-        onSuccess={handlePasswordSuccess}
-      />
     </div>
   );
 }

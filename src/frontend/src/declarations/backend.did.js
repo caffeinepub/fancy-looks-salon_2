@@ -112,6 +112,7 @@ export const idlService = IDL.Service({
   'removeHalfDay' : IDL.Func([IDL.Text, IDL.Nat, IDL.Text], [], []),
   'removeStaff' : IDL.Func([IDL.Text, IDL.Nat], [], []),
   'saveCallerUserProfile' : IDL.Func([UserProfile], [], []),
+  'setStaffPassword' : IDL.Func([IDL.Text, IDL.Nat, IDL.Text], [], []),
   'updateCheckInTime' : IDL.Func(
       [IDL.Text, IDL.Nat, IDL.Text, IDL.Nat, IDL.Nat],
       [],
@@ -137,6 +138,8 @@ export const idlService = IDL.Service({
       [],
     ),
   'verifyAdminPassword' : IDL.Func([IDL.Text], [IDL.Bool], ['query']),
+  'verifyStaffPassword' : IDL.Func([IDL.Nat, IDL.Text], [IDL.Bool], ['query']),
+  'hasStaffPassword' : IDL.Func([IDL.Nat], [IDL.Bool], ['query']),
 });
 
 export const idlInitArgs = [];
@@ -246,6 +249,7 @@ export const idlFactory = ({ IDL }) => {
     'removeHalfDay' : IDL.Func([IDL.Text, IDL.Nat, IDL.Text], [], []),
     'removeStaff' : IDL.Func([IDL.Text, IDL.Nat], [], []),
     'saveCallerUserProfile' : IDL.Func([UserProfile], [], []),
+    'setStaffPassword' : IDL.Func([IDL.Text, IDL.Nat, IDL.Text], [], []),
     'updateCheckInTime' : IDL.Func(
         [IDL.Text, IDL.Nat, IDL.Text, IDL.Nat, IDL.Nat],
         [],
@@ -271,6 +275,8 @@ export const idlFactory = ({ IDL }) => {
         [],
       ),
     'verifyAdminPassword' : IDL.Func([IDL.Text], [IDL.Bool], ['query']),
+    'verifyStaffPassword' : IDL.Func([IDL.Nat, IDL.Text], [IDL.Bool], ['query']),
+    'hasStaffPassword' : IDL.Func([IDL.Nat], [IDL.Bool], ['query']),
   });
 };
 

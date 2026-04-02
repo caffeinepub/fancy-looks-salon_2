@@ -89,6 +89,7 @@ export interface _SERVICE {
   'removeHalfDay' : ActorMethod<[string, bigint, string], undefined>,
   'removeStaff' : ActorMethod<[string, bigint], undefined>,
   'saveCallerUserProfile' : ActorMethod<[UserProfile], undefined>,
+  'setStaffPassword' : ActorMethod<[string, bigint, string], undefined>,
   'updateCheckInTime' : ActorMethod<
     [string, bigint, string, bigint, bigint],
     undefined
@@ -102,6 +103,8 @@ export interface _SERVICE {
     undefined
   >,
   'verifyAdminPassword' : ActorMethod<[string], boolean>,
+  'verifyStaffPassword' : ActorMethod<[bigint, string], boolean>,
+  'hasStaffPassword' : ActorMethod<[bigint], boolean>,
 }
 export declare const idlService: IDL.ServiceClass;
 export declare const idlInitArgs: IDL.Type[];
