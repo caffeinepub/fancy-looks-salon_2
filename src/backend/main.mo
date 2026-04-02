@@ -77,19 +77,19 @@ actor {
     markedAt : Int;
   };
 
-  // Keep userProfiles for upgrade compatibility
-  let userProfiles = Map.empty<Principal, UserProfile>();
-  let staffProfiles = Map.empty<Nat, StaffProfile>();
-  let attendanceRecords = Map.empty<Nat, AttendanceRecord>();
-  let earningsEntries = Map.empty<Nat, EarningsEntry>();
-  let notificationEvents = Map.empty<Nat, NotificationEvent>();
-  let halfDayRecords = Map.empty<Nat, HalfDayRecord>();
+  // Stable storage — data persists across canister upgrades
+  stable var userProfiles = Map.empty<Principal, UserProfile>();
+  stable var staffProfiles = Map.empty<Nat, StaffProfile>();
+  stable var attendanceRecords = Map.empty<Nat, AttendanceRecord>();
+  stable var earningsEntries = Map.empty<Nat, EarningsEntry>();
+  stable var notificationEvents = Map.empty<Nat, NotificationEvent>();
+  stable var halfDayRecords = Map.empty<Nat, HalfDayRecord>();
 
-  var nextStaffId = 1;
-  var nextAttendanceId = 1;
-  var nextEarningsId = 1;
-  var nextNotificationId = 1;
-  var nextHalfDayId = 1;
+  stable var nextStaffId = 1;
+  stable var nextAttendanceId = 1;
+  stable var nextEarningsId = 1;
+  stable var nextNotificationId = 1;
+  stable var nextHalfDayId = 1;
 
   func verifyAdminPasswordInternal(password : Text) : Bool {
     password == "Fancy0308";
