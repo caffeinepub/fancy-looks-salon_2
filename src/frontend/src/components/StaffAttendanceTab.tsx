@@ -62,7 +62,7 @@ function StatusBadge({
   if (status === "present") {
     return (
       <span
-        className="inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full"
+        className="inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full flex-shrink-0"
         style={{
           background: "oklch(0.68 0.18 148 / 0.18)",
           color: "oklch(0.68 0.18 148)",
@@ -77,7 +77,7 @@ function StatusBadge({
   if (status === "checked-out") {
     return (
       <span
-        className="inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full"
+        className="inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full flex-shrink-0"
         style={{
           background: "oklch(0.78 0.16 52 / 0.15)",
           color: "oklch(0.78 0.16 52)",
@@ -90,7 +90,7 @@ function StatusBadge({
   }
   return (
     <span
-      className="inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full"
+      className="inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full flex-shrink-0"
       style={{
         background: "oklch(0.60 0.22 22 / 0.15)",
         color: "oklch(0.65 0.22 22)",
@@ -204,7 +204,7 @@ function DailyView({
               initial={{ opacity: 0, x: -10 }}
               animate={{ opacity: 1, x: 0 }}
               transition={{ delay: i * 0.04, duration: 0.3 }}
-              className="flex items-center gap-3 rounded-xl px-4 py-3 luxury-card"
+              className="flex flex-wrap items-center gap-3 rounded-xl px-4 py-3 luxury-card"
             >
               {/* Photo */}
               <div
@@ -241,15 +241,29 @@ function DailyView({
                 </p>
               </div>
 
-              {/* Times */}
-              <div className="hidden sm:flex flex-col items-end gap-1 text-[11px] text-muted-foreground min-w-[110px]">
+              {/* Times — always visible on all screen sizes */}
+              <div className="flex flex-col items-end gap-1 text-[11px] text-muted-foreground min-w-[100px]">
                 <span className="flex items-center gap-1">
-                  <Clock className="w-3 h-3" />
-                  In: {formatNanoTime(row.record?.checkInTime)}
+                  <Clock className="w-3 h-3 text-gold opacity-70" />
+                  <span className="text-[10px] text-muted-foreground">In:</span>
+                  <span
+                    className="font-semibold"
+                    style={{ color: "oklch(0.76 0.15 85)" }}
+                  >
+                    {formatNanoTime(row.record?.checkInTime)}
+                  </span>
                 </span>
                 <span className="flex items-center gap-1">
-                  <Clock className="w-3 h-3" />
-                  Out: {formatNanoTime(row.record?.checkOutTime)}
+                  <Clock className="w-3 h-3 text-muted-foreground opacity-50" />
+                  <span className="text-[10px] text-muted-foreground">
+                    Out:
+                  </span>
+                  <span
+                    className="font-semibold"
+                    style={{ color: "oklch(0.85 0.01 80)" }}
+                  >
+                    {formatNanoTime(row.record?.checkOutTime)}
+                  </span>
                 </span>
               </div>
 
@@ -438,7 +452,7 @@ function MonthlyView({
                     return (
                       <div
                         key={String(record.id)}
-                        className="flex items-center gap-3 px-4 py-2.5"
+                        className="flex flex-wrap items-center gap-2 px-4 py-2.5"
                       >
                         {/* Mini avatar */}
                         <div
@@ -467,52 +481,35 @@ function MonthlyView({
                           )}
                         </div>
 
-                        <span className="flex-1 text-sm text-foreground font-medium truncate">
+                        {/* Name */}
+                        <span className="flex-1 min-w-[80px] text-sm text-foreground font-medium truncate">
                           {name}
                         </span>
 
-                        {/* Times */}
-                        <div className="hidden sm:flex items-center gap-4 text-[11px] text-muted-foreground">
-                          <span>
-                            In:{" "}
-                            <span className="text-foreground">
+                        {/* Times — always visible on all screen sizes */}
+                        <div className="flex items-center gap-3 text-[11px]">
+                          <span className="flex items-center gap-1">
+                            <span className="text-muted-foreground">In:</span>
+                            <span
+                              className="font-semibold"
+                              style={{ color: "oklch(0.76 0.15 85)" }}
+                            >
                               {formatNanoTime(record.checkInTime)}
                             </span>
                           </span>
-                          <span>
-                            Out:{" "}
-                            <span className="text-foreground">
+                          <span className="flex items-center gap-1">
+                            <span className="text-muted-foreground">Out:</span>
+                            <span
+                              className="font-semibold"
+                              style={{ color: "oklch(0.85 0.01 80)" }}
+                            >
                               {formatNanoTime(record.checkOutTime)}
                             </span>
                           </span>
                         </div>
 
+                        {/* Status badge */}
                         <StatusBadge status={status} />
-
-                        {/* Flags */}
-                        {record.isLate && (
-                          <span
-                            className="hidden sm:inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded font-medium"
-                            style={{
-                              background: "oklch(0.60 0.22 22 / 0.15)",
-                              color: "oklch(0.65 0.22 22)",
-                            }}
-                          >
-                            <AlertTriangle className="w-2.5 h-2.5" />
-                            Late
-                          </span>
-                        )}
-                        {Number(record.overtimeMinutes) > 0 && (
-                          <span
-                            className="hidden sm:inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded font-medium"
-                            style={{
-                              background: "oklch(0.76 0.15 85 / 0.12)",
-                              color: "oklch(0.76 0.15 85)",
-                            }}
-                          >
-                            +{Number(record.overtimeMinutes)}m OT
-                          </span>
-                        )}
                       </div>
                     );
                   })}
