@@ -41,10 +41,11 @@ function isCanisterStoppedError(err: unknown): boolean {
     lower.includes("reject_code: 5") ||
     lower.includes("reject code: 5") ||
     lower.includes("c0508") ||
-    lower.includes("fetch") ||
-    lower.includes("network") ||
     lower.includes("timeout") ||
-    lower.includes("unavailable")
+    lower.includes("unavailable") ||
+    lower.includes("failed to fetch") ||
+    lower.includes("network error") ||
+    lower.includes("load failed")
   );
 }
 
@@ -54,8 +55,7 @@ function isPermissionError(err: unknown): boolean {
   return (
     lower.includes("unauthorized") ||
     lower.includes("not authorized") ||
-    lower.includes("admin") ||
-    lower.includes("permission") ||
+    lower.includes("permission denied") ||
     lower.includes("access denied")
   );
 }
@@ -108,10 +108,14 @@ function StaffFormDialog({
   const isEdit = !!editingStaff;
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [retryError, setRetryError] = useState<string | null>(null);
+  const [retryErrorMsg, setRetryErrorMsg] = useState<string>("");
 
   // Reset retry error when dialog opens
   useEffect(() => {
-    if (open) setRetryError(null);
+    if (open) {
+      setRetryError(null);
+      setRetryErrorMsg("");
+    }
   }, [open]);
 
   const compressImage = (file: File): Promise<string> => {
@@ -120,30 +124,39 @@ function StaffFormDialog({
       const objectUrl = URL.createObjectURL(file);
       img.onload = () => {
         URL.revokeObjectURL(objectUrl);
-        const MAX_SIZE = 300;
-        let { width, height } = img;
-        if (width > height) {
-          if (width > MAX_SIZE) {
-            height = Math.round((height * MAX_SIZE) / width);
-            width = MAX_SIZE;
+
+        const compress = (maxSize: number, quality: number): string => {
+          let { width, height } = img;
+          if (width > height) {
+            if (width > maxSize) {
+              height = Math.round((height * maxSize) / width);
+              width = maxSize;
+            }
+          } else {
+            if (height > maxSize) {
+              width = Math.round((width * maxSize) / height);
+              height = maxSize;
+            }
           }
-        } else {
-          if (height > MAX_SIZE) {
-            width = Math.round((width * MAX_SIZE) / height);
-            height = MAX_SIZE;
+          const canvas = document.createElement("canvas");
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext("2d");
+          if (!ctx) throw new Error("Canvas not supported");
+          ctx.drawImage(img, 0, 0, width, height);
+          return canvas.toDataURL("image/jpeg", quality);
+        };
+
+        try {
+          let result = compress(150, 0.5);
+          // Fallback: if still over 300KB, compress more aggressively
+          if (result.length > 300000) {
+            result = compress(100, 0.3);
           }
+          resolve(result);
+        } catch (e) {
+          reject(e);
         }
-        const canvas = document.createElement("canvas");
-        canvas.width = width;
-        canvas.height = height;
-        const ctx = canvas.getContext("2d");
-        if (!ctx) {
-          reject(new Error("Canvas not supported"));
-          return;
-        }
-        ctx.drawImage(img, 0, 0, width, height);
-        const compressed = canvas.toDataURL("image/jpeg", 0.7);
-        resolve(compressed);
       };
       img.onerror = () => {
         URL.revokeObjectURL(objectUrl);
@@ -175,10 +188,15 @@ function StaffFormDialog({
           throw new Error("Server connecting, please wait and retry.");
         throw new Error("Not connected to server. Please refresh and retry.");
       }
+      // Strip photo if base64 is too large to prevent payload errors
+      let photoUrl = form.photoUrl.trim();
+      if (photoUrl.startsWith("data:") && photoUrl.length > 300000) {
+        photoUrl = "";
+      }
       return actor.addStaff(
         "Fancy0308",
         form.name.trim(),
-        form.photoUrl.trim(),
+        photoUrl,
         form.shiftStart,
         form.shiftEnd,
         form.isPremium,
@@ -190,17 +208,19 @@ function StaffFormDialog({
       onClose();
     },
     onError: (err) => {
+      const errMsg = err instanceof Error ? err.message : String(err);
       if (isPermissionError(err)) {
         setRetryError("permission");
+        setRetryErrorMsg(errMsg);
         toast.error("অনুমতি নেই। পুনরায় লগইন করুন।");
       } else if (isCanisterStoppedError(err)) {
         setRetryError("canister_stopped");
+        setRetryErrorMsg(errMsg);
         toast.error("Server temporarily unavailable. Please retry.");
       } else {
         setRetryError("other");
-        toast.error(
-          err instanceof Error ? err.message : "Failed to add staff.",
-        );
+        setRetryErrorMsg(errMsg);
+        toast.error(errMsg || "Failed to add staff.");
       }
     },
   });
@@ -210,11 +230,16 @@ function StaffFormDialog({
       if (!editingStaff) throw new Error("No staff to edit");
       if (!form.name.trim()) throw new Error("Name is required");
       if (!actor) throw new Error("Not connected");
+      // Strip photo if base64 is too large to prevent payload errors
+      let photoUrl = form.photoUrl.trim();
+      if (photoUrl.startsWith("data:") && photoUrl.length > 300000) {
+        photoUrl = "";
+      }
       return actor.updateStaff(
         "Fancy0308",
         editingStaff.id,
         form.name.trim(),
-        form.photoUrl.trim(),
+        photoUrl,
         form.shiftStart,
         form.shiftEnd,
         form.isPremium,
@@ -227,17 +252,19 @@ function StaffFormDialog({
       onClose();
     },
     onError: (err) => {
+      const errMsg = err instanceof Error ? err.message : String(err);
       if (isPermissionError(err)) {
         setRetryError("permission");
+        setRetryErrorMsg(errMsg);
         toast.error("অনুমতি নেই। পুনরায় লগইন করুন।");
       } else if (isCanisterStoppedError(err)) {
         setRetryError("canister_stopped");
+        setRetryErrorMsg(errMsg);
         toast.error("Server temporarily unavailable. Please retry.");
       } else {
         setRetryError("other");
-        toast.error(
-          err instanceof Error ? err.message : "Failed to update staff.",
-        );
+        setRetryErrorMsg(errMsg);
+        toast.error(errMsg || "Failed to update staff.");
       }
     },
   });
@@ -249,12 +276,14 @@ function StaffFormDialog({
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     setRetryError(null);
+    setRetryErrorMsg("");
     if (isEdit) updateMutation.mutate();
     else addMutation.mutate();
   };
 
   const handleRetry = () => {
     setRetryError(null);
+    setRetryErrorMsg("");
     if (isEdit) updateMutation.mutate();
     else addMutation.mutate();
   };
@@ -517,9 +546,16 @@ function StaffFormDialog({
                       </p>
                     </>
                   ) : (
-                    <p className="text-xs text-foreground font-medium">
-                      একটি সমস্যা হয়েছে। আবার চেষ্টা করুন।
-                    </p>
+                    <>
+                      <p className="text-xs text-foreground font-medium">
+                        একটি সমস্যা হয়েছে। আবার চেষ্টা করুন।
+                      </p>
+                      {retryErrorMsg && (
+                        <p className="text-xs text-muted-foreground mt-0.5 break-all">
+                          {retryErrorMsg}
+                        </p>
+                      )}
+                    </>
                   )}
                 </div>
                 {retryError !== "permission" && (
