@@ -79,6 +79,43 @@ function computeOvertimeInfo(
   return { isEarlyExit: diff < -5, overtimeMinutes: diff > 5 ? diff : 0 };
 }
 
+/** Compute how many minutes a staff joined BEFORE their shift start (early join = overtime bonus) */
+function computeEarlyJoinMinutes(
+  checkInTime: bigint,
+  shiftStart: string,
+): number {
+  const ms = Number(checkInTime / 1_000_000n);
+  const d = new Date(ms);
+  const checkInMins = d.getHours() * 60 + d.getMinutes();
+  const [sh, sm] = shiftStart.split(":").map(Number);
+  const shiftStartMins = (sh ?? 0) * 60 + (sm ?? 0);
+  const diff = shiftStartMins - checkInMins; // positive if early
+  return diff > 5 ? diff : 0; // >5 min early counts
+}
+
+/**
+ * Net Overtime = earlyJoinMinutes + checkoutOvertimeMinutes - lateMinutes
+ * Minimum 0 (can't be negative)
+ */
+function computeNetOvertimeMinutes(
+  checkInTime: bigint | null | undefined,
+  checkOutTime: bigint | null | undefined,
+  shiftStart: string,
+  shiftEnd: string,
+): number {
+  const earlyJoin =
+    checkInTime != null ? computeEarlyJoinMinutes(checkInTime, shiftStart) : 0;
+  const late =
+    checkInTime != null
+      ? computeLateInfo(checkInTime, shiftStart).lateMinutes
+      : 0;
+  const checkoutOT =
+    checkOutTime != null
+      ? computeOvertimeInfo(checkOutTime, shiftEnd).overtimeMinutes
+      : 0;
+  return Math.max(0, earlyJoin + checkoutOT - late);
+}
+
 export default function AnalyticsTab() {
   const { actor, isFetching } = useActor();
   const queryClient = useQueryClient();
@@ -370,9 +407,22 @@ export default function AnalyticsTab() {
                                   </span>
                                 )}
 
-                                {/* Overtime — frontend computed */}
-                                {overtimeInfo != null &&
-                                  overtimeInfo.overtimeMinutes > 0 && (
+                                {/* Net Overtime — earlyJoin + checkoutOT - late */}
+                                {(() => {
+                                  const netOT = computeNetOvertimeMinutes(
+                                    att?.checkInTime,
+                                    att?.checkOutTime,
+                                    staff.shiftStart,
+                                    staff.shiftEnd,
+                                  );
+                                  const earlyJoin =
+                                    att?.checkInTime != null
+                                      ? computeEarlyJoinMinutes(
+                                          att.checkInTime,
+                                          staff.shiftStart,
+                                        )
+                                      : 0;
+                                  return netOT > 0 ? (
                                     <span
                                       className="inline-flex items-center gap-1 text-xs font-medium px-2 py-1 rounded-full"
                                       style={{
@@ -384,20 +434,34 @@ export default function AnalyticsTab() {
                                       }}
                                     >
                                       <TrendingUp className="w-3 h-3" />
-                                      Extra +
-                                      {formatMinutes(
-                                        overtimeInfo.overtimeMinutes,
-                                      )}
+                                      OT +{formatMinutes(netOT)}
+                                      {earlyJoin > 0 &&
+                                      lateInfo?.lateMinutes ? (
+                                        <span className="opacity-60 text-[10px]">
+                                          {" "}
+                                          (Early +{formatMinutes(earlyJoin)} −
+                                          Late{" "}
+                                          {formatMinutes(lateInfo.lateMinutes)})
+                                        </span>
+                                      ) : earlyJoin > 0 ? (
+                                        <span className="opacity-60 text-[10px]">
+                                          {" "}
+                                          (Early +{formatMinutes(earlyJoin)})
+                                        </span>
+                                      ) : null}
                                     </span>
-                                  )}
+                                  ) : null;
+                                })()}
 
                                 {/* On time */}
                                 {isOnTime &&
                                   !overtimeInfo?.isEarlyExit &&
-                                  !(
-                                    overtimeInfo != null &&
-                                    overtimeInfo.overtimeMinutes > 0
-                                  ) && (
+                                  computeNetOvertimeMinutes(
+                                    att?.checkInTime,
+                                    att?.checkOutTime,
+                                    staff.shiftStart,
+                                    staff.shiftEnd,
+                                  ) === 0 && (
                                     <span
                                       className="text-xs font-medium"
                                       style={{ color: "oklch(0.68 0.18 148)" }}

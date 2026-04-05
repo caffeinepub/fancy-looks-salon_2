@@ -95,6 +95,43 @@ function formatMinutes(mins: number): string {
   return `${m}m`;
 }
 
+/** Compute how many minutes a staff joined BEFORE their shift start (early join = overtime bonus) */
+function computeEarlyJoinMinutes(
+  checkInTime: bigint,
+  shiftStart: string,
+): number {
+  const ms = Number(checkInTime / 1_000_000n);
+  const d = new Date(ms);
+  const checkInMins = d.getHours() * 60 + d.getMinutes();
+  const [sh, sm] = shiftStart.split(":").map(Number);
+  const shiftStartMins = (sh ?? 0) * 60 + (sm ?? 0);
+  const diff = shiftStartMins - checkInMins; // positive if early
+  return diff > 5 ? diff : 0;
+}
+
+/**
+ * Net Overtime = earlyJoinMinutes + checkoutOvertimeMinutes - lateMinutes
+ * Minimum 0
+ */
+function computeNetOvertimeMinutes(
+  checkInTime: bigint | null | undefined,
+  checkOutTime: bigint | null | undefined,
+  shiftStart: string,
+  shiftEnd: string,
+): number {
+  const earlyJoin =
+    checkInTime != null ? computeEarlyJoinMinutes(checkInTime, shiftStart) : 0;
+  const late =
+    checkInTime != null
+      ? computeLateInfo(checkInTime, shiftStart).lateMinutes
+      : 0;
+  const checkoutOT =
+    checkOutTime != null
+      ? computeOvertimeInfo(checkOutTime, shiftEnd).overtimeMinutes
+      : 0;
+  return Math.max(0, earlyJoin + checkoutOT - late);
+}
+
 function StaffMonthlySummary({
   staff,
   year,
@@ -165,13 +202,23 @@ function StaffMonthlySummary({
   ).length;
   const overtimeDays = att.filter(
     (r) =>
-      r.checkOutTime != null &&
-      computeOvertimeInfo(r.checkOutTime, staff.shiftEnd).overtimeMinutes > 0,
+      computeNetOvertimeMinutes(
+        r.checkInTime,
+        r.checkOutTime,
+        staff.shiftStart,
+        staff.shiftEnd,
+      ) > 0,
   ).length;
   const totalOvertimeMinutes = att.reduce((sum, r) => {
-    if (r.checkOutTime == null) return sum;
-    const info = computeOvertimeInfo(r.checkOutTime, staff.shiftEnd);
-    return sum + info.overtimeMinutes;
+    return (
+      sum +
+      computeNetOvertimeMinutes(
+        r.checkInTime,
+        r.checkOutTime,
+        staff.shiftStart,
+        staff.shiftEnd,
+      )
+    );
   }, 0);
   const earlyExitDays = att.filter(
     (r) =>
@@ -198,14 +245,40 @@ function StaffMonthlySummary({
   const overtimeRecords = att
     .filter(
       (r) =>
-        r.checkOutTime != null &&
-        computeOvertimeInfo(r.checkOutTime, staff.shiftEnd).overtimeMinutes > 0,
+        computeNetOvertimeMinutes(
+          r.checkInTime,
+          r.checkOutTime,
+          staff.shiftStart,
+          staff.shiftEnd,
+        ) > 0,
     )
-    .map((r) => ({
-      date: epochDaysToFullDate(r.date),
-      minutes: computeOvertimeInfo(r.checkOutTime!, staff.shiftEnd)
-        .overtimeMinutes,
-    }))
+    .map((r) => {
+      const netOT = computeNetOvertimeMinutes(
+        r.checkInTime,
+        r.checkOutTime,
+        staff.shiftStart,
+        staff.shiftEnd,
+      );
+      const earlyJoin =
+        r.checkInTime != null
+          ? computeEarlyJoinMinutes(r.checkInTime, staff.shiftStart)
+          : 0;
+      const late =
+        r.checkInTime != null
+          ? computeLateInfo(r.checkInTime, staff.shiftStart).lateMinutes
+          : 0;
+      const checkoutOT =
+        r.checkOutTime != null
+          ? computeOvertimeInfo(r.checkOutTime, staff.shiftEnd).overtimeMinutes
+          : 0;
+      return {
+        date: epochDaysToFullDate(r.date),
+        minutes: netOT,
+        earlyJoin,
+        late,
+        checkoutOT,
+      };
+    })
     .sort((a, b) => a.date.localeCompare(b.date));
 
   const hasDetails = lateRecords.length > 0 || overtimeRecords.length > 0;
@@ -440,7 +513,7 @@ function StaffMonthlySummary({
                 {overtimeRecords.map((rec) => (
                   <span
                     key={rec.date}
-                    className="text-[11px] px-2.5 py-1 rounded-full flex items-center gap-1"
+                    className="text-[11px] px-2.5 py-1 rounded-full flex items-center gap-1 flex-wrap"
                     style={{
                       background: "oklch(0.76 0.15 85 / 0.08)",
                       border: "1px solid oklch(0.76 0.15 85 / 0.30)",
@@ -451,8 +524,23 @@ function StaffMonthlySummary({
                     <span>{rec.date}</span>
                     <span className="opacity-60">—</span>
                     <span className="font-semibold">
-                      Overtime +{formatMinutes(rec.minutes)}
+                      OT +{formatMinutes(rec.minutes)}
                     </span>
+                    {(rec.earlyJoin > 0 || rec.late > 0) && (
+                      <span className="opacity-60 text-[10px]">
+                        (
+                        {rec.earlyJoin > 0
+                          ? `Early +${formatMinutes(rec.earlyJoin)}`
+                          : ""}
+                        {rec.checkoutOT > 0
+                          ? `${rec.earlyJoin > 0 ? " " : ""}+${formatMinutes(rec.checkoutOT)}`
+                          : ""}
+                        {rec.late > 0
+                          ? ` − Late ${formatMinutes(rec.late)}`
+                          : ""}
+                        )
+                      </span>
+                    )}
                   </span>
                 ))}
               </div>
