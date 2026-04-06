@@ -5,6 +5,7 @@ import Time "mo:core/Time";
 import Nat "mo:core/Nat";
 import Int "mo:core/Int";
 import Principal "mo:core/Principal";
+import Text "mo:core/Text";
 
 import Runtime "mo:core/Runtime";
 import MixinAuthorization "authorization/MixinAuthorization";
@@ -247,6 +248,11 @@ actor {
     if (overtime > 0) {
       (overtime / (60 * 1_000_000_000)).toNat();
     } else { 0 };
+  };
+
+  // Health check - always returns true when canister is running
+  public query func ping() : async Bool {
+    true;
   };
 
   // STAFF MANAGEMENT - Password-only auth (no IC identity check)

@@ -84,6 +84,7 @@ export interface backendInterface {
     hasStaffPassword(staffId: bigint): Promise<boolean>;
     isCallerAdmin(): Promise<boolean>;
     markHalfDay(adminPassword: string, staffId: bigint, date: string): Promise<bigint>;
+    ping(): Promise<boolean>;
     removeHalfDay(adminPassword: string, staffId: bigint, date: string): Promise<void>;
     removeStaff(adminPassword: string, id: bigint): Promise<void>;
     saveCallerUserProfile(profile: UserProfile): Promise<void>;

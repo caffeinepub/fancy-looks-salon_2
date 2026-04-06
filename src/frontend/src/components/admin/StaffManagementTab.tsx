@@ -39,6 +39,12 @@ function isNetworkError(err: unknown): boolean {
     lower.includes("failed to fetch") ||
     lower.includes("network error") ||
     lower.includes("load failed") ||
+    lower.includes("currently unavailable") ||
+    lower.includes("canister has no update calls") ||
+    lower.includes("ic0503") ||
+    lower.includes("ic0504") ||
+    lower.includes("reject_code: 4") ||
+    lower.includes("reject code: 4") ||
     lower.includes("fetch error")
   );
 }
@@ -46,17 +52,23 @@ function isNetworkError(err: unknown): boolean {
 function isCanisterStoppedError(err: unknown): boolean {
   const msg = err instanceof Error ? err.message : String(err);
   const lower = msg.toLowerCase();
+  // Only match real ICP canister stopped/unavailable errors, not Motoko trap messages
   return (
-    lower.includes("stopped") ||
     lower.includes("cc0508") ||
     lower.includes("reject_code: 5") ||
     lower.includes("reject code: 5") ||
     lower.includes("c0508") ||
-    lower.includes("timeout") ||
-    lower.includes("unavailable") ||
+    lower.includes("canister stopped") ||
+    lower.includes("canister is stopped") ||
     lower.includes("failed to fetch") ||
     lower.includes("network error") ||
-    lower.includes("load failed")
+    lower.includes("load failed") ||
+    lower.includes("currently unavailable") ||
+    lower.includes("canister has no update calls") ||
+    lower.includes("ic0503") ||
+    lower.includes("ic0504") ||
+    lower.includes("reject_code: 4") ||
+    lower.includes("reject code: 4")
   );
 }
 
@@ -197,11 +209,9 @@ function StaffFormDialog({
   const addMutation = useMutation({
     mutationFn: async () => {
       if (!form.name.trim()) throw new Error("Name is required");
-      if (!actor) {
-        if (isFetching)
-          throw new Error("Server connecting, please wait and retry.");
-        throw new Error("Not connected to server. Please refresh and retry.");
-      }
+      const { createActorWithConfig } = await import("../../config");
+      // Always create a fresh actor to avoid stale/stopped connections
+      const freshActor = await createActorWithConfig();
       // Strip photo if base64 is too large to prevent payload errors (ICP 2MB limit)
       let photoUrl = form.photoUrl.trim();
       if (photoUrl.startsWith("data:") && photoUrl.length > 150000) {
@@ -213,7 +223,7 @@ function StaffFormDialog({
         "photoLen=",
         photoUrl.length,
       );
-      const result = await actor.addStaff(
+      const result = await freshActor.addStaff(
         "Fancy0308",
         form.name.trim(),
         photoUrl,

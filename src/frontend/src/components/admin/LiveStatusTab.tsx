@@ -39,7 +39,6 @@ function getTodayEpochDays(): string {
 /** Convert epoch-days string to YYYY-MM-DD local date string for input[type=date] */
 function epochDaysToDateInput(epochDays: string): string {
   const ms = Number(epochDays) * 24 * 60 * 60 * 1000;
-  // Use UTC date parts to avoid timezone shift
   const d = new Date(ms);
   const year = d.getUTCFullYear();
   const month = String(d.getUTCMonth() + 1).padStart(2, "0");
@@ -50,8 +49,36 @@ function epochDaysToDateInput(epochDays: string): string {
 /** Convert YYYY-MM-DD to epoch-days string */
 function dateInputToEpochDays(dateStr: string): string {
   const [y, m, d] = dateStr.split("-").map(Number);
-  const dt = new Date(Date.UTC(y, (m ?? 1) - 1, d ?? 1));
+  const dt = new Date(Date.UTC(y ?? 2024, (m ?? 1) - 1, d ?? 1));
   return Math.floor(dt.getTime() / (24 * 60 * 60 * 1000)).toString();
+}
+
+/**
+ * Convert a local HH:MM string typed by the user + a UTC epoch-days string
+ * into UTC hours and minutes for the backend.
+ *
+ * The backend stores: dayStartNs + (utcHour * 60 + utcMin) * 60 * 1_000_000_000
+ * So we must send UTC hours/minutes, NOT local hours/minutes.
+ */
+function localTimeToUtc(
+  localTimeStr: string,
+  epochDaysStr: string,
+): { h: number; m: number } {
+  const epochDays = Number(epochDaysStr);
+  const [hStr, mStr] = localTimeStr.split(":");
+  const localH = Number.parseInt(hStr ?? "0", 10);
+  const localM = Number.parseInt(mStr ?? "0", 10);
+  // Build UTC midnight of that day, then interpret the typed time as LOCAL time
+  const dateAtMidnightUTC = new Date(epochDays * 24 * 60 * 60 * 1000);
+  const year = dateAtMidnightUTC.getUTCFullYear();
+  const month = dateAtMidnightUTC.getUTCMonth();
+  const day = dateAtMidnightUTC.getUTCDate();
+  // Create a local date at the user-specified time
+  const localDate = new Date(year, month, day, localH, localM, 0, 0);
+  // Extract UTC hours and minutes
+  const utcH = localDate.getUTCHours();
+  const utcM = localDate.getUTCMinutes();
+  return { h: utcH, m: utcM };
 }
 
 /** Format minutes as "Xh Ym" */
@@ -90,10 +117,167 @@ function computeOvertimeInfo(
   return { isEarlyExit: diff < -5, overtimeMinutes: diff > 5 ? diff : 0 };
 }
 
+/** Compute how many minutes a staff joined BEFORE their shift start (early join = overtime bonus) */
+function computeEarlyJoinMinutes(
+  checkInTime: bigint,
+  shiftStart: string,
+): number {
+  const ms = Number(checkInTime / 1_000_000n);
+  const d = new Date(ms);
+  const checkInMins = d.getHours() * 60 + d.getMinutes();
+  const [sh, sm] = shiftStart.split(":").map(Number);
+  const shiftStartMins = (sh ?? 0) * 60 + (sm ?? 0);
+  const diff = shiftStartMins - checkInMins; // positive if early
+  return diff > 5 ? diff : 0;
+}
+
+/**
+ * Net Overtime = earlyJoinMinutes + checkoutOvertimeMinutes - lateMinutes
+ * Minimum 0 (can't be negative)
+ */
+function computeNetOvertimeMinutes(
+  checkInTime: bigint | null | undefined,
+  checkOutTime: bigint | null | undefined,
+  shiftStart: string,
+  shiftEnd: string,
+): number {
+  const earlyJoin =
+    checkInTime != null ? computeEarlyJoinMinutes(checkInTime, shiftStart) : 0;
+  const late =
+    checkInTime != null
+      ? computeLateInfo(checkInTime, shiftStart).lateMinutes
+      : 0;
+  const checkoutOT =
+    checkOutTime != null
+      ? computeOvertimeInfo(checkOutTime, shiftEnd).overtimeMinutes
+      : 0;
+  return Math.max(0, earlyJoin + checkoutOT - late);
+}
+
 function timeStringFromNano(ns: bigint): string {
   const ms = Number(ns / 1_000_000n);
   const d = new Date(ms);
   return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+}
+
+/** Get yesterday's date as YYYY-MM-DD */
+function getYesterdayDateInput(): string {
+  const d = new Date();
+  d.setDate(d.getDate() - 1);
+  return d.toISOString().slice(0, 10);
+}
+
+const editPanelStyle = {
+  background: "oklch(0.14 0.008 60)",
+  border: "1px solid oklch(0.76 0.15 85 / 0.3)",
+};
+
+function EditPanel({
+  label,
+  timeValue,
+  onTimeChange,
+  dateValue,
+  onDateChange,
+  onConfirm,
+  onCancel,
+  isPending,
+  ocidPrefix,
+  index,
+}: {
+  label: string;
+  timeValue: string;
+  onTimeChange: (v: string) => void;
+  dateValue: string;
+  onDateChange: (v: string) => void;
+  onConfirm: () => void;
+  onCancel: () => void;
+  isPending: boolean;
+  ocidPrefix: string;
+  index: number;
+}) {
+  const inputStyle = {
+    background: "oklch(0.10 0.006 60)",
+    border: "1px solid oklch(0.76 0.15 85 / 0.35)",
+    colorScheme: "dark" as const,
+  };
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: -4 }}
+      animate={{ opacity: 1, y: 0 }}
+      className="rounded-lg p-2.5 space-y-2"
+      style={editPanelStyle}
+    >
+      <div className="flex items-center gap-1.5">
+        <Clock className="w-3 h-3 text-gold flex-shrink-0" />
+        <span className="text-[10px] font-medium text-gold uppercase tracking-wide">
+          {label}
+        </span>
+      </div>
+      {/* Date input */}
+      <div className="space-y-1">
+        <div className="flex items-center gap-1">
+          <Calendar className="w-2.5 h-2.5 text-muted-foreground" />
+          <span className="text-[9px] text-muted-foreground uppercase tracking-wide">
+            Date
+          </span>
+        </div>
+        <input
+          type="date"
+          value={dateValue}
+          onChange={(e) => onDateChange(e.target.value)}
+          className="w-full rounded-md px-2.5 py-1.5 text-sm text-foreground bg-transparent outline-none"
+          style={inputStyle}
+        />
+      </div>
+      {/* Time input */}
+      <div className="space-y-1">
+        <div className="flex items-center gap-1">
+          <Clock className="w-2.5 h-2.5 text-muted-foreground" />
+          <span className="text-[9px] text-muted-foreground uppercase tracking-wide">
+            Time (your local time)
+          </span>
+        </div>
+        <input
+          type="time"
+          value={timeValue}
+          onChange={(e) => onTimeChange(e.target.value)}
+          data-ocid={`${ocidPrefix}_time_input.${index + 1}`}
+          className="w-full rounded-md px-2.5 py-1.5 text-sm text-foreground bg-transparent outline-none"
+          style={inputStyle}
+        />
+      </div>
+      <div className="flex gap-1.5">
+        <button
+          type="button"
+          data-ocid={`${ocidPrefix}_confirm_button.${index + 1}`}
+          onClick={onConfirm}
+          disabled={!timeValue || !dateValue || isPending}
+          className="flex-1 flex items-center justify-center gap-1 text-xs font-medium py-1.5 rounded-md transition-colors disabled:opacity-50"
+          style={{
+            background: "oklch(0.76 0.15 85)",
+            color: "oklch(0.08 0.006 60)",
+          }}
+        >
+          <Check className="w-3 h-3" />
+          {isPending ? "Saving\u2026" : "Save"}
+        </button>
+        <button
+          type="button"
+          data-ocid={`${ocidPrefix}_cancel_button.${index + 1}`}
+          onClick={onCancel}
+          disabled={isPending}
+          className="flex-1 flex items-center justify-center gap-1 text-xs font-medium py-1.5 rounded-md transition-colors disabled:opacity-50 text-muted-foreground hover:text-foreground"
+          style={{
+            background: "oklch(0.18 0.008 60)",
+            border: "1px solid oklch(0.28 0.008 60)",
+          }}
+        >
+          <X className="w-3 h-3" />
+          Cancel
+        </button>
+      </div>
+    </motion.div>
+  );
 }
 
 function StaffStatusCard({
@@ -144,13 +328,11 @@ function StaffStatusCard({
       dateStr,
     }: { timeStr: string; dateStr: string }) => {
       if (!actor || !attendance) throw new Error("Not ready");
-      const [hStr, mStr] = timeStr.split(":");
-      const h = Number.parseInt(hStr ?? "0", 10);
-      const m = Number.parseInt(mStr ?? "0", 10);
-      // Use the selected date (epoch-days) for the record
       const targetDate = dateStr
         ? dateInputToEpochDays(dateStr)
         : attendance.date;
+      // Convert local time to UTC before sending to backend
+      const { h, m } = localTimeToUtc(timeStr, targetDate);
       await actor.updateCheckInTime(
         "Fancy0308",
         staff.id,
@@ -178,12 +360,11 @@ function StaffStatusCard({
       dateStr,
     }: { timeStr: string; dateStr: string }) => {
       if (!actor || !attendance) throw new Error("Not ready");
-      const [hStr, mStr] = timeStr.split(":");
-      const h = Number.parseInt(hStr ?? "0", 10);
-      const m = Number.parseInt(mStr ?? "0", 10);
       const targetDate = dateStr
         ? dateInputToEpochDays(dateStr)
         : attendance.date;
+      // Convert local time to UTC before sending to backend
+      const { h, m } = localTimeToUtc(timeStr, targetDate);
       await actor.updateCheckOutTime(
         "Fancy0308",
         staff.id,
@@ -225,117 +406,6 @@ function StaffStatusCard({
     );
     setEditCheckOutMode(true);
     setEditCheckInMode(false);
-  }
-
-  const editPanelStyle = {
-    background: "oklch(0.14 0.008 60)",
-    border: "1px solid oklch(0.76 0.15 85 / 0.3)",
-  };
-
-  function EditPanel({
-    label,
-    timeValue,
-    onTimeChange,
-    dateValue,
-    onDateChange,
-    onConfirm,
-    onCancel,
-    isPending,
-    ocidPrefix,
-  }: {
-    label: string;
-    timeValue: string;
-    onTimeChange: (v: string) => void;
-    dateValue: string;
-    onDateChange: (v: string) => void;
-    onConfirm: () => void;
-    onCancel: () => void;
-    isPending: boolean;
-    ocidPrefix: string;
-  }) {
-    const inputStyle = {
-      background: "oklch(0.10 0.006 60)",
-      border: "1px solid oklch(0.76 0.15 85 / 0.35)",
-      colorScheme: "dark" as const,
-    };
-    return (
-      <motion.div
-        initial={{ opacity: 0, y: -4 }}
-        animate={{ opacity: 1, y: 0 }}
-        className="rounded-lg p-2.5 space-y-2"
-        style={editPanelStyle}
-      >
-        <div className="flex items-center gap-1.5">
-          <Clock className="w-3 h-3 text-gold flex-shrink-0" />
-          <span className="text-[10px] font-medium text-gold uppercase tracking-wide">
-            {label}
-          </span>
-        </div>
-        {/* Date input */}
-        <div className="space-y-1">
-          <div className="flex items-center gap-1">
-            <Calendar className="w-2.5 h-2.5 text-muted-foreground" />
-            <span className="text-[9px] text-muted-foreground uppercase tracking-wide">
-              Date
-            </span>
-          </div>
-          <input
-            type="date"
-            value={dateValue}
-            onChange={(e) => onDateChange(e.target.value)}
-            className="w-full rounded-md px-2.5 py-1.5 text-sm text-foreground bg-transparent outline-none"
-            style={inputStyle}
-          />
-        </div>
-        {/* Time input */}
-        <div className="space-y-1">
-          <div className="flex items-center gap-1">
-            <Clock className="w-2.5 h-2.5 text-muted-foreground" />
-            <span className="text-[9px] text-muted-foreground uppercase tracking-wide">
-              Time
-            </span>
-          </div>
-          <input
-            type="time"
-            value={timeValue}
-            onChange={(e) => onTimeChange(e.target.value)}
-            data-ocid={`${ocidPrefix}_time_input.${index + 1}`}
-            className="w-full rounded-md px-2.5 py-1.5 text-sm text-foreground bg-transparent outline-none"
-            style={inputStyle}
-          />
-        </div>
-        <div className="flex gap-1.5">
-          <button
-            type="button"
-            data-ocid={`${ocidPrefix}_confirm_button.${index + 1}`}
-            onClick={onConfirm}
-            disabled={!timeValue || !dateValue || isPending}
-            className="flex-1 flex items-center justify-center gap-1 text-xs font-medium py-1.5 rounded-md transition-colors disabled:opacity-50"
-            style={{
-              background: "oklch(0.76 0.15 85)",
-              color: "oklch(0.08 0.006 60)",
-            }}
-          >
-            <Check className="w-3 h-3" />
-            {isPending ? "Saving\u2026" : "Save"}
-          </button>
-          <button
-            type="button"
-            data-ocid={`${ocidPrefix}_cancel_button.${index + 1}`}
-            onClick={onCancel}
-            disabled={isPending}
-            className="flex-1 flex items-center justify-center gap-1 text-xs font-medium py-1.5 rounded-md transition-colors disabled:opacity-50 text-muted-foreground hover:text-foreground"
-            style={{
-              background: "oklch(0.18 0.008 60)",
-              border: "1px solid oklch(0.28 0.008 60)",
-            }}
-          >
-            <X className="w-3 h-3" />
-            Cancel
-          </button>
-        </div>
-      </motion.div>
-    );
   }
 
   return (
@@ -494,6 +564,7 @@ function StaffStatusCard({
             }}
             isPending={editCheckInMutation.isPending}
             ocidPrefix="live_status.checkin"
+            index={index}
           />
         )}
 
@@ -518,6 +589,7 @@ function StaffStatusCard({
             }}
             isPending={editCheckOutMutation.isPending}
             ocidPrefix="live_status.checkout"
+            index={index}
           />
         )}
       </div>
@@ -540,7 +612,7 @@ function StaffStatusCard({
         </div>
       )}
 
-      {/* Flags */}
+      {/* Flags — Net Overtime replaces simple checkout OT */}
       {!staff.isPremium && attendance && attendance.checkInTime != null && (
         <div className="flex flex-wrap gap-1">
           {lateInfo?.isLate && (
@@ -567,27 +639,296 @@ function StaffStatusCard({
               Early Exit
             </span>
           )}
-          {overtimeInfo != null && overtimeInfo.overtimeMinutes > 0 && (
-            <span
-              className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded font-medium"
-              style={{
-                background: "oklch(0.76 0.15 85 / 0.12)",
-                color: "oklch(0.76 0.15 85)",
-              }}
-            >
-              <TrendingUp className="w-2.5 h-2.5" />
-              Extra +{formatMinutes(overtimeInfo.overtimeMinutes)}
-            </span>
-          )}
+          {/* Net Overtime: earlyJoin + checkoutOT - late */}
+          {(() => {
+            const netOT = computeNetOvertimeMinutes(
+              attendance.checkInTime,
+              attendance.checkOutTime,
+              staff.shiftStart,
+              staff.shiftEnd,
+            );
+            const earlyJoin = computeEarlyJoinMinutes(
+              attendance.checkInTime,
+              staff.shiftStart,
+            );
+            if (netOT <= 0) return null;
+            return (
+              <span
+                className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded font-medium"
+                style={{
+                  background: "oklch(0.76 0.15 85 / 0.12)",
+                  color: "oklch(0.76 0.15 85)",
+                }}
+              >
+                <TrendingUp className="w-2.5 h-2.5" />
+                OT +{formatMinutes(netOT)}
+                {earlyJoin > 0 && (
+                  <span className="opacity-60">
+                    {" "}
+                    (Early +{formatMinutes(earlyJoin)})
+                  </span>
+                )}
+              </span>
+            );
+          })()}
         </div>
       )}
     </motion.div>
   );
 }
 
+/** Card for editing a previous-date attendance record */
+function PrevAttendanceCard({
+  staff,
+  record,
+  index,
+  prevDate,
+}: {
+  staff: StaffProfile;
+  record: AttendanceRecord;
+  index: number;
+  prevDate: string;
+}) {
+  const { actor } = useActor();
+  const queryClient = useQueryClient();
+
+  const [editCheckInMode, setEditCheckInMode] = useState(false);
+  const [editCheckInTime, setEditCheckInTime] = useState("");
+  const [editCheckInDate, setEditCheckInDate] = useState("");
+
+  const [editCheckOutMode, setEditCheckOutMode] = useState(false);
+  const [editCheckOutTime, setEditCheckOutTime] = useState("");
+  const [editCheckOutDate, setEditCheckOutDate] = useState("");
+
+  const editCheckInMutation = useMutation({
+    mutationFn: async ({
+      timeStr,
+      dateStr,
+    }: { timeStr: string; dateStr: string }) => {
+      if (!actor) throw new Error("Not ready");
+      const targetDate = dateStr ? dateInputToEpochDays(dateStr) : record.date;
+      const { h, m } = localTimeToUtc(timeStr, targetDate);
+      await actor.updateCheckInTime(
+        "Fancy0308",
+        staff.id,
+        targetDate,
+        BigInt(h),
+        BigInt(m),
+      );
+    },
+    onSuccess: () => {
+      toast.success("Check-in time updated!");
+      queryClient.invalidateQueries({ queryKey: ["allAttendanceRecords"] });
+      queryClient.invalidateQueries({
+        queryKey: ["attendanceByDate", prevDate],
+      });
+      queryClient.invalidateQueries({ queryKey: ["todayAttendance"] });
+      setEditCheckInMode(false);
+    },
+    onError: (err: unknown) => {
+      toast.error(err instanceof Error ? err.message : "Update failed");
+    },
+  });
+
+  const editCheckOutMutation = useMutation({
+    mutationFn: async ({
+      timeStr,
+      dateStr,
+    }: { timeStr: string; dateStr: string }) => {
+      if (!actor) throw new Error("Not ready");
+      const targetDate = dateStr ? dateInputToEpochDays(dateStr) : record.date;
+      const { h, m } = localTimeToUtc(timeStr, targetDate);
+      await actor.updateCheckOutTime(
+        "Fancy0308",
+        staff.id,
+        targetDate,
+        BigInt(h),
+        BigInt(m),
+      );
+    },
+    onSuccess: () => {
+      toast.success("Check-out time updated!");
+      queryClient.invalidateQueries({ queryKey: ["allAttendanceRecords"] });
+      queryClient.invalidateQueries({
+        queryKey: ["attendanceByDate", prevDate],
+      });
+      queryClient.invalidateQueries({ queryKey: ["todayAttendance"] });
+      setEditCheckOutMode(false);
+    },
+    onError: (err: unknown) => {
+      toast.error(err instanceof Error ? err.message : "Update failed");
+    },
+  });
+
+  function openCheckInEdit() {
+    setEditCheckInTime(
+      record.checkInTime != null ? timeStringFromNano(record.checkInTime) : "",
+    );
+    setEditCheckInDate(epochDaysToDateInput(record.date));
+    setEditCheckInMode(true);
+    setEditCheckOutMode(false);
+  }
+
+  function openCheckOutEdit() {
+    setEditCheckOutTime(
+      record.checkOutTime != null
+        ? timeStringFromNano(record.checkOutTime)
+        : "",
+    );
+    setEditCheckOutDate(epochDaysToDateInput(record.date));
+    setEditCheckOutMode(true);
+    setEditCheckInMode(false);
+  }
+
+  return (
+    <div
+      className="rounded-xl p-3 space-y-2.5"
+      style={{
+        background: "oklch(0.13 0.006 60)",
+        border: "1px solid oklch(0.22 0.008 60)",
+      }}
+    >
+      {/* Staff info */}
+      <div className="flex items-center gap-2.5">
+        <div
+          className="w-8 h-8 rounded-full overflow-hidden flex-shrink-0"
+          style={{ border: "1px solid oklch(0.76 0.15 85 / 0.25)" }}
+        >
+          {staff.photoUrl ? (
+            <img
+              src={staff.photoUrl}
+              alt={staff.name}
+              className="w-full h-full object-cover"
+              onError={(e) => {
+                const img = e.currentTarget as HTMLImageElement;
+                img.src = `https://i.pravatar.cc/150?img=${(Number(staff.id) % 70) + 1}`;
+              }}
+            />
+          ) : (
+            <div
+              className="w-full h-full flex items-center justify-center"
+              style={{ background: "oklch(0.20 0.012 80)" }}
+            >
+              <UserCircle2 className="w-4 h-4 text-gold opacity-50" />
+            </div>
+          )}
+        </div>
+        <div className="flex-1 min-w-0">
+          <p className="text-sm font-semibold font-display text-foreground truncate">
+            {staff.name}
+          </p>
+          <p className="text-[10px] text-muted-foreground">
+            {staff.shiftStart}\u2013{staff.shiftEnd}
+          </p>
+        </div>
+      </div>
+
+      {/* Check-in row */}
+      <div className="space-y-1">
+        <div className="flex items-center gap-2 flex-wrap">
+          <div className="flex items-center gap-1 text-xs text-muted-foreground">
+            <Clock className="w-3 h-3" />
+            <span>In:</span>
+            <span className="text-foreground font-medium">
+              {record.checkInTime != null
+                ? formatNanoTimestamp(record.checkInTime)
+                : "\u2014"}
+            </span>
+          </div>
+          {record.checkInTime != null && (
+            <button
+              type="button"
+              onClick={openCheckInEdit}
+              data-ocid={`prev_attendance.checkin_edit.${index + 1}`}
+              className="p-0.5 rounded transition-colors hover:bg-[oklch(0.76_0.15_85_/_0.15)] text-muted-foreground hover:text-gold"
+              title="Edit check-in time"
+            >
+              <Pencil className="w-3 h-3" />
+            </button>
+          )}
+        </div>
+        {editCheckInMode && (
+          <EditPanel
+            label="Edit Check-in Date & Time"
+            timeValue={editCheckInTime}
+            onTimeChange={setEditCheckInTime}
+            dateValue={editCheckInDate}
+            onDateChange={setEditCheckInDate}
+            onConfirm={() =>
+              editCheckInMutation.mutate({
+                timeStr: editCheckInTime,
+                dateStr: editCheckInDate,
+              })
+            }
+            onCancel={() => {
+              setEditCheckInMode(false);
+              setEditCheckInTime("");
+              setEditCheckInDate("");
+            }}
+            isPending={editCheckInMutation.isPending}
+            ocidPrefix="prev_attendance.checkin"
+            index={index}
+          />
+        )}
+      </div>
+
+      {/* Check-out row */}
+      <div className="space-y-1">
+        <div className="flex items-center gap-2 flex-wrap">
+          <div className="flex items-center gap-1 text-xs text-muted-foreground">
+            <Clock className="w-3 h-3" />
+            <span>Out:</span>
+            <span className="text-foreground font-medium">
+              {record.checkOutTime != null
+                ? formatNanoTimestamp(record.checkOutTime)
+                : "\u2014"}
+            </span>
+          </div>
+          <button
+            type="button"
+            onClick={openCheckOutEdit}
+            data-ocid={`prev_attendance.checkout_edit.${index + 1}`}
+            className="p-0.5 rounded transition-colors hover:bg-[oklch(0.76_0.15_85_/_0.15)] text-muted-foreground hover:text-gold"
+            title="Edit check-out time"
+          >
+            <Pencil className="w-3 h-3" />
+          </button>
+        </div>
+        {editCheckOutMode && (
+          <EditPanel
+            label="Edit Check-out Date & Time"
+            timeValue={editCheckOutTime}
+            onTimeChange={setEditCheckOutTime}
+            dateValue={editCheckOutDate}
+            onDateChange={setEditCheckOutDate}
+            onConfirm={() =>
+              editCheckOutMutation.mutate({
+                timeStr: editCheckOutTime,
+                dateStr: editCheckOutDate,
+              })
+            }
+            onCancel={() => {
+              setEditCheckOutMode(false);
+              setEditCheckOutTime("");
+              setEditCheckOutDate("");
+            }}
+            isPending={editCheckOutMutation.isPending}
+            ocidPrefix="prev_attendance.checkout"
+            index={index}
+          />
+        )}
+      </div>
+    </div>
+  );
+}
+
 export default function LiveStatusTab() {
   const { actor, isFetching } = useActor();
   const todayEpochDays = getTodayEpochDays();
+
+  // Previous date editor state
+  const [prevDate, setPrevDate] = useState("");
+  const prevEpochDays = prevDate ? dateInputToEpochDays(prevDate) : "";
 
   const { data: staffList, isLoading: isLoadingStaff } = useQuery({
     queryKey: ["allStaff"],
@@ -639,6 +980,17 @@ export default function LiveStatusTab() {
     staleTime: 0,
   });
 
+  // Previous date attendance query
+  const { data: prevAttendanceList, isLoading: isLoadingPrev } = useQuery({
+    queryKey: ["attendanceByDate", prevDate],
+    queryFn: async () => {
+      if (!actor || !prevDate) return [];
+      return actor.getAttendanceByDate(prevEpochDays);
+    },
+    enabled: !!actor && !!prevDate && !isFetching,
+    staleTime: 0,
+  });
+
   const isLoading = isLoadingStaff || isLoadingAttendance || isFetching;
   const activeStaff = (staffList ?? []).filter((s) => s.isActive);
 
@@ -652,6 +1004,17 @@ export default function LiveStatusTab() {
     const a = getAttendance(s);
     return !!a && a.checkInTime != null && a.checkOutTime == null;
   }).length;
+
+  // Staff with records on the selected previous date
+  const prevStaffWithRecords =
+    prevAttendanceList && staffList
+      ? prevAttendanceList
+          .map((rec) => ({
+            record: rec,
+            staff: staffList.find((s) => String(s.id) === String(rec.staffId)),
+          }))
+          .filter((x) => x.staff != null)
+      : [];
 
   return (
     <div className="space-y-5">
@@ -734,6 +1097,119 @@ export default function LiveStatusTab() {
           ))}
         </motion.div>
       )}
+
+      {/* ── Previous Attendance Editor ── */}
+      <div
+        className="rounded-2xl p-5 space-y-4"
+        style={{
+          background: "oklch(0.12 0.007 60)",
+          border: "1px solid oklch(0.76 0.15 85 / 0.18)",
+        }}
+      >
+        {/* Section header */}
+        <div className="flex items-center gap-2.5">
+          <div
+            className="w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0"
+            style={{ background: "oklch(0.76 0.15 85 / 0.12)" }}
+          >
+            <Calendar className="w-4 h-4 text-gold" />
+          </div>
+          <div>
+            <h3 className="font-display font-semibold text-sm text-foreground">
+              Edit Previous Attendance
+            </h3>
+            <p className="text-[10px] text-muted-foreground">
+              পুরনো Attendance-এর check-in/check-out সময় ঠিক করুন
+            </p>
+          </div>
+        </div>
+
+        {/* Date picker */}
+        <div className="flex items-center gap-3 flex-wrap">
+          <label
+            htmlFor="prev-date-picker"
+            className="text-xs text-muted-foreground"
+          >
+            Select previous date:
+          </label>
+          <input
+            id="prev-date-picker"
+            data-ocid="prev_attendance.date_select"
+            type="date"
+            value={prevDate}
+            onChange={(e) => setPrevDate(e.target.value)}
+            max={getYesterdayDateInput()}
+            className="rounded-lg px-3 py-1.5 text-sm text-foreground outline-none"
+            style={{
+              background: "oklch(0.10 0.006 60)",
+              border: "1px solid oklch(0.76 0.15 85 / 0.3)",
+              colorScheme: "dark",
+            }}
+          />
+          {prevDate && (
+            <span
+              className="text-xs px-2 py-0.5 rounded-full"
+              style={{
+                background: "oklch(0.76 0.15 85 / 0.12)",
+                color: "oklch(0.76 0.15 85)",
+              }}
+            >
+              {new Date(
+                Number(dateInputToEpochDays(prevDate)) * 24 * 60 * 60 * 1000,
+              ).toLocaleDateString(undefined, {
+                day: "numeric",
+                month: "short",
+                year: "numeric",
+              })}
+            </span>
+          )}
+        </div>
+
+        {/* Content */}
+        {!prevDate && (
+          <div
+            data-ocid="prev_attendance.empty_state"
+            className="text-center py-8 text-muted-foreground"
+          >
+            <Calendar className="w-8 h-8 mx-auto mb-2 opacity-20" />
+            <p className="text-sm">Select a date to edit attendance records</p>
+          </div>
+        )}
+
+        {prevDate && isLoadingPrev && (
+          <div
+            data-ocid="prev_attendance.loading_state"
+            className="flex justify-center py-6"
+          >
+            <div className="gold-spinner" />
+          </div>
+        )}
+
+        {prevDate && !isLoadingPrev && prevStaffWithRecords.length === 0 && (
+          <div
+            data-ocid="prev_attendance.empty_state"
+            className="text-center py-6 text-muted-foreground"
+          >
+            <p className="text-sm">
+              No attendance records found for this date.
+            </p>
+          </div>
+        )}
+
+        {prevDate && !isLoadingPrev && prevStaffWithRecords.length > 0 && (
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
+            {prevStaffWithRecords.map(({ staff, record }, i) => (
+              <PrevAttendanceCard
+                key={`${String(record.staffId)}-${record.date}`}
+                staff={staff!}
+                record={record}
+                index={i}
+                prevDate={prevDate}
+              />
+            ))}
+          </div>
+        )}
+      </div>
     </div>
   );
 }
