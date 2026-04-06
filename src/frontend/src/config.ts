@@ -82,14 +82,36 @@ export async function loadConfig(): Promise<Config> {
 
 function extractAgentErrorMessage(error: string): string {
   const errorString = String(error);
-  const match = errorString.match(/with message:\s*'([^']+)'/s);
-  return match ? match[1] : errorString;
+
+  // Try to extract Reject text from ICP call rejection messages
+  // Format: "Call was rejected:\n  Request ID: ...\n  Reject code: N\n  Reject text: MESSAGE"
+  const rejectTextMatch = errorString.match(/Reject\s+text:\s*([^\n]+)/i);
+  if (rejectTextMatch) {
+    return rejectTextMatch[1].trim();
+  }
+
+  // Try format: "with message: 'MESSAGE'"
+  const withMessageMatch = errorString.match(/with message:\s*'([^']+)'/s);
+  if (withMessageMatch) {
+    return withMessageMatch[1];
+  }
+
+  // Try to extract trap message: "Canister ... trapped: MESSAGE"
+  const trapMatch = errorString.match(/trapped(?:\s+explicitly)?(?:\s+with\s+(?:the\s+)?message)?:\s*([^\n]+)/i);
+  if (trapMatch) {
+    return trapMatch[1].trim();
+  }
+
+  return errorString;
 }
 
 function processError(e: unknown): never {
   if (e && typeof e === "object" && "message" in e) {
-    throw new Error(extractAgentErrorMessage(`${e.message}`));
+    const extracted = extractAgentErrorMessage(`${(e as { message: string }).message}`);
+    console.error("[Backend Error] Raw:", (e as { message: string }).message, "\nExtracted:", extracted);
+    throw new Error(extracted);
   }
+  console.error("[Backend Error] Unknown:", e);
   throw e;
 }
 

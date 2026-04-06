@@ -32,6 +32,17 @@ import { toast } from "sonner";
 import type { StaffProfile } from "../../backend.d";
 import { useActor } from "../../hooks/useActor";
 
+function isNetworkError(err: unknown): boolean {
+  const msg = err instanceof Error ? err.message : String(err);
+  const lower = msg.toLowerCase();
+  return (
+    lower.includes("failed to fetch") ||
+    lower.includes("network error") ||
+    lower.includes("load failed") ||
+    lower.includes("fetch error")
+  );
+}
+
 function isCanisterStoppedError(err: unknown): boolean {
   const msg = err instanceof Error ? err.message : String(err);
   const lower = msg.toLowerCase();
@@ -148,10 +159,13 @@ function StaffFormDialog({
         };
 
         try {
-          let result = compress(150, 0.5);
-          // Fallback: if still over 300KB, compress more aggressively
-          if (result.length > 300000) {
-            result = compress(100, 0.3);
+          let result = compress(120, 0.5);
+          // Fallback: keep compressing until under 100KB
+          if (result.length > 150000) {
+            result = compress(80, 0.4);
+          }
+          if (result.length > 150000) {
+            result = compress(60, 0.3);
           }
           resolve(result);
         } catch (e) {
@@ -188,12 +202,18 @@ function StaffFormDialog({
           throw new Error("Server connecting, please wait and retry.");
         throw new Error("Not connected to server. Please refresh and retry.");
       }
-      // Strip photo if base64 is too large to prevent payload errors
+      // Strip photo if base64 is too large to prevent payload errors (ICP 2MB limit)
       let photoUrl = form.photoUrl.trim();
-      if (photoUrl.startsWith("data:") && photoUrl.length > 300000) {
-        photoUrl = "";
+      if (photoUrl.startsWith("data:") && photoUrl.length > 150000) {
+        photoUrl = ""; // drop photo if still too large
       }
-      return actor.addStaff(
+      console.log(
+        "[addStaff] name=",
+        form.name.trim(),
+        "photoLen=",
+        photoUrl.length,
+      );
+      const result = await actor.addStaff(
         "Fancy0308",
         form.name.trim(),
         photoUrl,
@@ -201,6 +221,8 @@ function StaffFormDialog({
         form.shiftEnd,
         form.isPremium,
       );
+      console.log("[addStaff] success, id=", result);
+      return result;
     },
     onSuccess: () => {
       toast.success("Staff member added!");
@@ -209,18 +231,19 @@ function StaffFormDialog({
     },
     onError: (err) => {
       const errMsg = err instanceof Error ? err.message : String(err);
-      if (isPermissionError(err)) {
-        setRetryError("permission");
+      console.error("[addStaff] error:", errMsg);
+      if (isNetworkError(err)) {
+        setRetryError("canister_stopped");
         setRetryErrorMsg(errMsg);
-        toast.error("অনুমতি নেই। পুনরায় লগইন করুন।");
+        toast.error("নেটওয়ার্ক সমস্যা। আবার চেষ্টা করুন।");
       } else if (isCanisterStoppedError(err)) {
         setRetryError("canister_stopped");
         setRetryErrorMsg(errMsg);
-        toast.error("Server temporarily unavailable. Please retry.");
+        toast.error("Server সাময়িকভাবে বন্ধ। একটু পরে আবার চেষ্টা করুন।");
       } else {
         setRetryError("other");
         setRetryErrorMsg(errMsg);
-        toast.error(errMsg || "Failed to add staff.");
+        toast.error(errMsg || "Staff add করতে সমস্যা হয়েছে।");
       }
     },
   });
@@ -230,10 +253,10 @@ function StaffFormDialog({
       if (!editingStaff) throw new Error("No staff to edit");
       if (!form.name.trim()) throw new Error("Name is required");
       if (!actor) throw new Error("Not connected");
-      // Strip photo if base64 is too large to prevent payload errors
+      // Strip photo if base64 is too large to prevent payload errors (ICP 2MB limit)
       let photoUrl = form.photoUrl.trim();
-      if (photoUrl.startsWith("data:") && photoUrl.length > 300000) {
-        photoUrl = "";
+      if (photoUrl.startsWith("data:") && photoUrl.length > 150000) {
+        photoUrl = ""; // drop photo if still too large
       }
       return actor.updateStaff(
         "Fancy0308",
